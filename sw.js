@@ -1,8 +1,7 @@
-var CACHE_SHELL = 'forest-shell-v4';
-var CACHE_TILES = 'forest-tiles-v1';
-var CACHE_DATA = 'forest-data-v1';
+var CACHE_SHELL = 'habitat-shell-v1';
+var CACHE_TILES = 'habitat-tiles-v1';
+var CACHE_DATA = 'habitat-data-v1';
 
-// App shell files to cache on install
 var SHELL_FILES = [
     './',
     './index.html',
@@ -11,7 +10,6 @@ var SHELL_FILES = [
     'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js'
 ];
 
-// Install: cache the app shell
 self.addEventListener('install', function(e) {
     e.waitUntil(
         caches.open(CACHE_SHELL).then(function(cache) {
@@ -22,7 +20,6 @@ self.addEventListener('install', function(e) {
     );
 });
 
-// Activate: clean old caches
 self.addEventListener('activate', function(e) {
     e.waitUntil(
         caches.keys().then(function(keys) {
@@ -35,24 +32,16 @@ self.addEventListener('activate', function(e) {
     );
 });
 
-// Fetch strategy:
-// - Shell files: cache-first
-// - Tile/WMS requests: cache-first, then network (and cache the response)
-// - Identify/API requests: network-only (no point caching these)
 self.addEventListener('fetch', function(e) {
     var url = e.request.url;
-
-    // Skip non-GET
     if (e.request.method !== 'GET') return;
 
-    // Identify/API requests: network-first, cache the response for offline
+    // Identify API: network-first, cache for offline
     if (url.indexOf('/identify?') !== -1 || (url.indexOf('corsproxy.io') !== -1 && url.indexOf('identify') !== -1)) {
         e.respondWith(
             caches.open(CACHE_DATA).then(function(cache) {
                 return fetch(e.request).then(function(response) {
-                    if (response.ok) {
-                        cache.put(e.request, response.clone());
-                    }
+                    if (response.ok) cache.put(e.request, response.clone());
                     return response;
                 }).catch(function() {
                     return cache.match(e.request).then(function(cached) {
@@ -66,22 +55,18 @@ self.addEventListener('fetch', function(e) {
         return;
     }
 
-    // Other corsproxy requests: network only
     if (url.indexOf('corsproxy.io') !== -1) return;
 
-    // Tile requests (OSM, Esri, WMS): cache-first, fallback to network, cache result
+    // Tiles: cache-first, network fallback
     if (isTileRequest(url)) {
         e.respondWith(
             caches.open(CACHE_TILES).then(function(cache) {
                 return cache.match(e.request).then(function(cached) {
                     if (cached) return cached;
                     return fetch(e.request).then(function(response) {
-                        if (response.ok) {
-                            cache.put(e.request, response.clone());
-                        }
+                        if (response.ok) cache.put(e.request, response.clone());
                         return response;
                     }).catch(function() {
-                        // Offline and not cached — return a transparent 1x1 PNG
                         return new Response(
                             Uint8Array.from(atob('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVQI12NgAAIABQABNjN9GQAAAAlwSFlzAAAWJQAAFiUBSVIk8AAAAA0lEQVQI12P4z8BQDwAEgAF/QualIQAAAABJRU5ErkJggg=='), function(c) { return c.charCodeAt(0); }),
                             { headers: { 'Content-Type': 'image/png' } }
@@ -93,7 +78,7 @@ self.addEventListener('fetch', function(e) {
         return;
     }
 
-    // App shell: network-first for HTML (so updates arrive), cache-first for libraries
+    // HTML/JSON: network-first (so updates arrive)
     var isHtml = url.indexOf('.html') !== -1 || url.endsWith('/') || url.indexOf('.json') !== -1;
     if (isHtml) {
         e.respondWith(
@@ -107,7 +92,7 @@ self.addEventListener('fetch', function(e) {
             })
         );
     } else {
-        // JS/CSS libraries: cache-first
+        // JS/CSS: cache-first
         e.respondWith(
             caches.match(e.request).then(function(cached) {
                 return cached || fetch(e.request);
