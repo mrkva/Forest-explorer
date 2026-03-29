@@ -171,108 +171,85 @@
         // Scale control
         L.control.scale({ imperial: false }).addTo(map);
 
-        // --- GetFeatureInfo on click ---
-        // WMS endpoints to query (forest stands + tree composition)
-        var featureInfoSources = [
+        // --- ArcGIS REST Identify on click ---
+        // Using ArcGIS REST identify endpoint (returns JSON, better CORS support than WMS GetFeatureInfo)
+        var identifySources = [
             {
                 name: 'Forest stand',
-                url: 'https://gis.nlcsk.org/arcgis/services/MPRV/JPRL_ZBGIS/MapServer/WMSServer',
-                layers: '0'
+                url: 'https://gis.nlcsk.org/arcgis/rest/services/MPRV/JPRL_ZBGIS/MapServer/identify'
             },
             {
                 name: 'Tree species',
-                url: 'https://gis.nlcsk.org/arcgis/services/Inspire/DrevinoveZlozenie/MapServer/WmsServer',
-                layers: '0'
+                url: 'https://gis.nlcsk.org/arcgis/rest/services/Inspire/DrevinoveZlozenie/MapServer/identify'
             }
         ];
 
-        function buildGetFeatureInfoUrl(source, latlng) {
-            var point = map.latLngToContainerPoint(latlng);
-            var size = map.getSize();
+        function buildIdentifyUrl(source, latlng) {
             var bounds = map.getBounds();
-            var sw = map.options.crs.project(bounds.getSouthWest());
-            var ne = map.options.crs.project(bounds.getNorthEast());
-            var bbox = [sw.x, sw.y, ne.x, ne.y].join(',');
-
+            var size = map.getSize();
             var params = {
-                SERVICE: 'WMS',
-                REQUEST: 'GetFeatureInfo',
-                VERSION: '1.1.1',
-                LAYERS: source.layers,
-                QUERY_LAYERS: source.layers,
-                INFO_FORMAT: 'application/json',
-                SRS: 'EPSG:3857',
-                BBOX: bbox,
-                WIDTH: size.x,
-                HEIGHT: size.y,
-                X: Math.round(point.x),
-                Y: Math.round(point.y)
+                geometry: latlng.lng + ',' + latlng.lat,
+                geometryType: 'esriGeometryPoint',
+                sr: '4326',
+                layers: 'all',
+                tolerance: '10',
+                mapExtent: [bounds.getWest(), bounds.getSouth(), bounds.getEast(), bounds.getNorth()].join(','),
+                imageDisplay: size.x + ',' + size.y + ',96',
+                returnGeometry: 'false',
+                f: 'json'
             };
-
             var qs = Object.keys(params).map(function(k) {
                 return k + '=' + encodeURIComponent(params[k]);
             }).join('&');
-
             return source.url + '?' + qs;
         }
 
         // Friendly labels for common JPRL/composition fields
         var fieldLabels = {
-            // JPRL fields
-            'PORAST': 'Stand ID',
-            'PLOCHA': 'Area (ha)',
-            'DREVIN': 'Main species',
-            'VEK': 'Age (years)',
-            'ZAKMENENIE': 'Stocking',
-            'BONITA': 'Site quality',
-            'HOSPSP': 'Management',
-            'LESNA_OBL': 'Forest region',
-            'LHC': 'Management unit',
-            'ETAZ': 'Storey',
-            'ZASTUP': 'Share (%)',
-            'SKUP_LT': 'Forest type group',
-            // Species composition
-            'DREVINA': 'Species',
-            'ZASTUPENIE': 'Share (%)',
-            'POCEL': 'Sub-compartment'
+            'PORAST': 'Stand ID', 'PLOCHA': 'Area (ha)', 'DREVIN': 'Main species',
+            'VEK': 'Age (years)', 'ZAKMENENIE': 'Stocking', 'BONITA': 'Site quality',
+            'HOSPSP': 'Management', 'LESNA_OBL': 'Forest region', 'LHC': 'Mgmt unit',
+            'ETAZ': 'Storey', 'ZASTUP': 'Share (%)', 'SKUP_LT': 'Forest type group',
+            'DREVINA': 'Species', 'ZASTUPENIE': 'Share (%)', 'POCEL': 'Sub-compartment',
+            'PSK': 'Stand', 'ODDIEL': 'Compartment', 'DIELEC': 'Sub-comp.', 'PORCEL': 'Parcel',
+            'KAT_LES': 'Forest category', 'VYSKA': 'Height (m)', 'HRUBY': 'Diameter (cm)'
         };
 
-        // Fields to skip (internal/uninformative)
         var skipFields = ['OBJECTID', 'SHAPE', 'Shape', 'SHAPE.AREA', 'SHAPE.LEN',
-            'SHAPE_Length', 'SHAPE_Area', 'FID', 'OBJECTID_1'];
+            'SHAPE_Length', 'SHAPE_Area', 'Shape_Length', 'Shape_Area', 'FID', 'OBJECTID_1'];
 
-        function formatFeatureInfo(name, data) {
-            if (!data || !data.features || data.features.length === 0) {
-                return '';
-            }
-            var html = '<h3>' + name + '</h3><table>';
-            var props = data.features[0].properties || {};
-            var keys = Object.keys(props);
-            keys.forEach(function(key) {
-                if (skipFields.indexOf(key) !== -1) return;
-                var val = props[key];
-                if (val === null || val === '' || val === 'Null') return;
-                var label = fieldLabels[key] || key;
-                html += '<tr><td>' + label + '</td><td>' + val + '</td></tr>';
+        function formatIdentifyResults(name, data) {
+            if (!data || !data.results || data.results.length === 0) return '';
+            var html = '<h3>' + name + '</h3>';
+            data.results.forEach(function(result, i) {
+                var attrs = result.attributes || {};
+                if (i > 0) html += '<hr style="margin:6px 0;border:none;border-top:1px solid #ddd;">';
+                html += '<table>';
+                Object.keys(attrs).forEach(function(key) {
+                    if (skipFields.indexOf(key) !== -1) return;
+                    var val = attrs[key];
+                    if (val === null || val === '' || val === 'Null' || val === 'null') return;
+                    var label = fieldLabels[key] || key;
+                    html += '<tr><td>' + label + '</td><td>' + val + '</td></tr>';
+                });
+                html += '</table>';
             });
-            html += '</table>';
-
-            // If multiple features (e.g. multiple species in composition), show them all
-            if (data.features.length > 1) {
-                for (var i = 1; i < data.features.length; i++) {
-                    var p = data.features[i].properties || {};
-                    html += '<table style="margin-top:4px;border-top:2px solid #ccc;padding-top:4px;">';
-                    Object.keys(p).forEach(function(key) {
-                        if (skipFields.indexOf(key) !== -1) return;
-                        var val = p[key];
-                        if (val === null || val === '' || val === 'Null') return;
-                        var label = fieldLabels[key] || key;
-                        html += '<tr><td>' + label + '</td><td>' + val + '</td></tr>';
-                    });
-                    html += '</table>';
-                }
-            }
             return html;
+        }
+
+        // Try direct fetch, fall back to CORS proxy if blocked
+        function fetchWithCorsFallback(url) {
+            return fetch(url).then(function(r) {
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                return r.json();
+            }).catch(function() {
+                // Try CORS proxy as fallback
+                var proxyUrl = 'https://corsproxy.io/?' + encodeURIComponent(url);
+                return fetch(proxyUrl).then(function(r) {
+                    if (!r.ok) throw new Error('Proxy HTTP ' + r.status);
+                    return r.json();
+                });
+            });
         }
 
         map.on('click', function(e) {
@@ -284,19 +261,19 @@
             var results = [];
             var done = 0;
 
-            featureInfoSources.forEach(function(source, idx) {
-                var url = buildGetFeatureInfoUrl(source, e.latlng);
-                fetch(url)
-                    .then(function(r) { return r.json(); })
+            identifySources.forEach(function(source, idx) {
+                var url = buildIdentifyUrl(source, e.latlng);
+                fetchWithCorsFallback(url)
                     .then(function(data) {
-                        results[idx] = formatFeatureInfo(source.name, data);
+                        results[idx] = formatIdentifyResults(source.name, data);
                     })
-                    .catch(function() {
+                    .catch(function(err) {
+                        console.error('Identify failed for', source.name, err);
                         results[idx] = '';
                     })
                     .finally(function() {
                         done++;
-                        if (done === featureInfoSources.length) {
+                        if (done === identifySources.length) {
                             var html = '<div class="forest-info">';
                             var combined = results.join('');
                             if (combined) {
