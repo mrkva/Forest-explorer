@@ -1,4 +1,4 @@
-var CACHE_SHELL = 'forest-shell-v3';
+var CACHE_SHELL = 'forest-shell-v4';
 var CACHE_TILES = 'forest-tiles-v1';
 var CACHE_DATA = 'forest-data-v1';
 
@@ -93,12 +93,27 @@ self.addEventListener('fetch', function(e) {
         return;
     }
 
-    // App shell: cache-first
-    e.respondWith(
-        caches.match(e.request).then(function(cached) {
-            return cached || fetch(e.request);
-        })
-    );
+    // App shell: network-first for HTML (so updates arrive), cache-first for libraries
+    var isHtml = url.indexOf('.html') !== -1 || url.endsWith('/') || url.indexOf('.json') !== -1;
+    if (isHtml) {
+        e.respondWith(
+            fetch(e.request).then(function(response) {
+                if (response.ok) {
+                    caches.open(CACHE_SHELL).then(function(c) { c.put(e.request, response.clone()); });
+                }
+                return response.clone();
+            }).catch(function() {
+                return caches.match(e.request);
+            })
+        );
+    } else {
+        // JS/CSS libraries: cache-first
+        e.respondWith(
+            caches.match(e.request).then(function(cached) {
+                return cached || fetch(e.request);
+            })
+        );
+    }
 });
 
 function isTileRequest(url) {
