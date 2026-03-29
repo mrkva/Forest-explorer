@@ -19,6 +19,7 @@
         .leaflet-control-layers { max-height: 80vh; overflow-y: auto; }
         .leaflet-control-layers-expanded { padding: 8px 12px; }
         .leaflet-control-layers label { font-size: 14px; padding: 2px 0; }
+        .leaflet-control-layers-separator { border-top: 2px solid #ccc !important; margin: 6px 0 !important; }
 
         #opacity-control {
             position: absolute; bottom: 30px; left: 10px; z-index: 1000;
@@ -31,26 +32,27 @@
 
         /* Popup */
         .fi { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-size: 14px; max-width: 280px; line-height: 1.5; }
+        .fi .section-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin: 0 0 4px; padding: 3px 0; }
+        .fi .section-forest { color: #1a5c1a; border-bottom: 2px solid #1a5c1a; }
+        .fi .section-geology { color: #8b5e3c; border-bottom: 2px solid #8b5e3c; margin-top: 10px; }
         .fi .type-name { font-size: 17px; font-weight: 700; color: #1a5c1a; margin-bottom: 4px; }
         .fi .hslt-name { font-size: 14px; color: #555; margin-bottom: 6px; }
         .fi .category-tag {
             display: inline-block; padding: 2px 10px; border-radius: 4px;
-            font-size: 12px; font-weight: 600; color: white; margin-bottom: 8px;
+            font-size: 12px; font-weight: 600; color: white; margin-bottom: 4px;
         }
         .fi .cat-H { background: #d97706; }
         .fi .cat-O { background: #059669; }
         .fi .cat-U { background: #7c3aed; }
         .fi .area { font-size: 13px; color: #777; }
-        .fi .section-label { font-size: 11px; font-weight: 700; text-transform: uppercase; color: #999; letter-spacing: 0.5px; margin: 8px 0 3px; }
-        .fi .geo-name { font-size: 15px; font-weight: 600; color: #8b5e3c; }
-        .fi .geo-detail { font-size: 13px; color: #666; margin-bottom: 2px; }
-        .fi .divider { border: none; border-top: 1px solid #eee; margin: 8px 0; }
+        .fi .geo-name { font-size: 15px; font-weight: 600; color: #8b5e3c; margin: 4px 0; }
+        .fi .geo-age { font-size: 13px; color: #666; }
         .fi .loading { color: #888; font-style: italic; }
         .fi .error { color: #666; }
 
-        /* Offline save button */
+        /* Save area button - bottom right */
         #save-area {
-            position: absolute; top: 80px; right: 10px; z-index: 1000;
+            position: absolute; bottom: 30px; right: 10px; z-index: 1000;
             background: #1a5c1a; color: white; border: none; border-radius: 8px;
             padding: 8px 14px; font-size: 13px; font-weight: 600; cursor: pointer;
             box-shadow: 0 2px 8px rgba(0,0,0,0.3);
@@ -58,7 +60,7 @@
         }
         #save-area:active { background: #145214; }
         #save-progress {
-            position: absolute; top: 118px; right: 10px; z-index: 1000;
+            position: absolute; bottom: 70px; right: 10px; z-index: 1000;
             background: white; border-radius: 8px; padding: 8px 14px;
             box-shadow: 0 2px 8px rgba(0,0,0,0.3); font-size: 12px;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
@@ -68,7 +70,7 @@
 </head>
 <body>
     <div id="map"></div>
-    <button id="save-area">Save area offline</button>
+    <button id="save-area">Save offline</button>
     <div id="save-progress"></div>
     <div id="opacity-control">
         <label>Overlay opacity: <span id="opacity-value">70%</span></label>
@@ -77,24 +79,20 @@
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
-        // --- Register service worker for offline ---
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.register('sw.js');
         }
 
         var map = L.map('map').setView([48.7, 19.5], 8);
 
-        // Base layers
         var osm = L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-            attribution: '&copy; <a href="https://openstreetmap.org">OSM</a>',
-            maxZoom: 19
+            attribution: '&copy; <a href="https://openstreetmap.org">OSM</a>', maxZoom: 19
         }).addTo(map);
 
         var satellite = L.tileLayer('https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}', {
             attribution: '&copy; Esri', maxZoom: 19
         });
 
-        // WMS helper
         function wms(url, attr, extra) {
             return L.tileLayer.wms(url, Object.assign({
                 format: 'image/png', transparent: true, opacity: 0.7, attribution: attr
@@ -104,7 +102,7 @@
         var nlcAttr = '&copy; <a href="https://web.nlcsk.org">NLC</a>';
         var geoAttr = '&copy; <a href="https://www.geology.sk">SGÚDŠ</a>';
 
-        // Forest overlays (NLC)
+        // Forest overlays
         var jprl = wms("https://gis.nlcsk.org/arcgis/services/MPRV/JPRL_ZBGIS/MapServer/WMSServer",
             nlcAttr, { layers: '0', version: '1.1.1' }).addTo(map);
         var drevinoveZlozenie = wms("https://gis.nlcsk.org/arcgis/services/Inspire/DrevinoveZlozenie/MapServer/WmsServer", nlcAttr, { layers: '0' });
@@ -113,7 +111,7 @@
         var lhc = wms("https://gis.nlcsk.org/arcgis/services/Inspire/LHC/MapServer/WMSServer", nlcAttr, { layers: '0' });
         var lesneOblasti = wms("https://gis.nlcsk.org/arcgis/services/Inspire/LesneOblasti/MapServer/WMSServer", nlcAttr, { layers: '0' });
 
-        // Geology overlays (SGÚDŠ)
+        // Geology overlays
         var geoMap = wms("https://ags.geology.sk/arcgis/services/WebServices/GM50/MapServer/WMSServer",
             geoAttr, { layers: '0', version: '1.1.1' }).addTo(map);
         var geoIGR = wms("https://ags.geology.sk/arcgis/services/WebServices/IGR50/MapServer/WMSServer",
@@ -124,17 +122,46 @@
         var allWmsLayers = [jprl, drevinoveZlozenie, lesneTypy, lesneCesty, lhc, lesneOblasti,
                             geoMap, geoIGR, geoDeposits];
 
-        L.control.layers(
+        // Use two separate layer controls for grouped categories
+        // Leaflet doesn't support group headers in layer control natively,
+        // so we add overlays with prefixed names and use a custom separator
+        var forestOverlays = {
+            "Forest stands (JPRL)": jprl,
+            "Tree species": drevinoveZlozenie,
+            "Forest types": lesneTypy,
+            "Forest roads": lesneCesty,
+            "Management units": lhc,
+            "Forest regions": lesneOblasti
+        };
+        var geoOverlays = {
+            "Geological map 1:50k": geoMap,
+            "Engineering-geo 1:50k": geoIGR,
+            "Mineral deposits": geoDeposits
+        };
+
+        // Add a single control but inject group headers after creation
+        var layerControl = L.control.layers(
             { "OpenStreetMap": osm, "Satellite": satellite },
-            {
-                "Forest stands (JPRL)": jprl, "Tree species": drevinoveZlozenie, "Forest types": lesneTypy,
-                "Forest roads": lesneCesty, "Management units": lhc, "Forest regions": lesneOblasti,
-                "Geological map 1:50k": geoMap,
-                "Engineering-geo map 1:50k": geoIGR,
-                "Mineral deposits": geoDeposits
-            },
+            Object.assign({}, forestOverlays, geoOverlays),
             { collapsed: true }
         ).addTo(map);
+
+        // Inject group headers into the layer control
+        setTimeout(function() {
+            var container = document.querySelector('.leaflet-control-layers-overlays');
+            if (!container) return;
+            var labels = container.querySelectorAll('label');
+            // Find the first geology label (after 6 forest labels)
+            if (labels.length > 6) {
+                var forestHeader = document.createElement('div');
+                forestHeader.innerHTML = '<strong style="font-size:12px;color:#1a5c1a;display:block;padding:4px 0 2px;">FOREST</strong>';
+                container.insertBefore(forestHeader, labels[0]);
+
+                var geoHeader = document.createElement('div');
+                geoHeader.innerHTML = '<hr style="margin:6px 0;border:none;border-top:2px solid #ccc;"><strong style="font-size:12px;color:#8b5e3c;display:block;padding:2px 0;">GEOLOGY</strong>';
+                container.insertBefore(geoHeader, labels[6]);
+            }
+        }, 100);
 
         // Geolocation
         map.locate({ setView: false, maxZoom: 14, enableHighAccuracy: true });
@@ -158,7 +185,7 @@
         var identifySources = [
             { key: 'jprl',    url: 'https://gis.nlcsk.org/arcgis/rest/services/MPRV/JPRL_ZBGIS/MapServer/identify' },
             { key: 'lestypy', url: 'https://gis.nlcsk.org/arcgis/rest/services/Inspire/LesneTypy/MapServer/identify' },
-            { key: 'geo',     url: 'https://ags.geology.sk/arcgis/rest/services/WebServices/GM50/MapServer/identify', layers: 'visible', tolerance: '15' }
+            { key: 'geo',     url: 'https://ags.geology.sk/arcgis/rest/services/WebServices/GM50/MapServer/identify', layers: 'all', tolerance: '15' }
         ];
 
         var categoryLabels = {
@@ -169,7 +196,7 @@
 
         function identifyUrl(source, latlng) {
             var b = map.getBounds(), s = map.getSize();
-            var params = [
+            return source.url + '?' + [
                 'geometry=' + latlng.lng + ',' + latlng.lat,
                 'geometryType=esriGeometryPoint', 'sr=4326',
                 'layers=' + (source.layers || 'all'),
@@ -177,8 +204,7 @@
                 'mapExtent=' + [b.getWest(), b.getSouth(), b.getEast(), b.getNorth()].join(','),
                 'imageDisplay=' + s.x + ',' + s.y + ',96',
                 'returnGeometry=false', 'f=json'
-            ];
-            return source.url + '?' + params.join('&');
+            ].join('&');
         }
 
         function fetchJson(url) {
@@ -191,37 +217,31 @@
             });
         }
 
-        // Find a field value trying multiple possible field names
         function findField(attrs, names) {
             for (var i = 0; i < names.length; i++) {
                 var v = attrs[names[i]];
-                if (v !== undefined && v !== null && v !== '' && v !== 'Null') return v;
+                if (v !== undefined && v !== null && v !== '' && v !== 'Null' && v !== '-') return v;
             }
             return null;
         }
 
-        function buildPopup(data, errors) {
-            errors = errors || {};
+        function buildPopup(data) {
             var html = '<div class="fi">';
-            var hasType = false, hasCat = false;
+            var hasForest = false, hasGeo = false;
+
+            // ---- FOREST section ----
+            var forestHtml = '';
 
             // Forest type from LesneTypy
             if (data.lestypy && data.lestypy.results && data.lestypy.results.length > 0) {
                 var a = data.lestypy.results[0].attributes;
-                // Use the exact field names from the real response
                 var hlavny = findField(a, ['Hlavny_lesny_typ', 'Hlavny lesny typ', 'HLAVNY_LESNY_TYP',
                     'Nazov_lesneho_typu_1', 'Nazov lesneho typu 1', 'NAZOV_LESNEHO_TYPU_1',
                     'nazov_lesneho_typu_1', 'Nazov_lesneho_typu', 'NAZOV']);
                 var hslt = findField(a, ['Nazov_HSLT', 'Nazov HSLT', 'NAZOV_HSLT', 'nazov_hslt', 'HSLT']);
 
-                if (hlavny) {
-                    html += '<div class="type-name">' + hlavny + '</div>';
-                    hasType = true;
-                }
-                if (hslt) {
-                    html += '<div class="hslt-name">' + hslt + '</div>';
-                    hasType = true;
-                }
+                if (hlavny) { forestHtml += '<div class="type-name">' + hlavny + '</div>'; hasForest = true; }
+                if (hslt) { forestHtml += '<div class="hslt-name">' + hslt + '</div>'; hasForest = true; }
             }
 
             // Category + area from JPRL
@@ -229,74 +249,53 @@
                 var aj = data.jprl.results[0].attributes;
                 var kl = findField(aj, ['KL', 'kl']);
                 var cat = kl ? categoryLabels[kl] : null;
-                if (cat) {
-                    html += '<div><span class="category-tag ' + cat.cls + '">' + cat.text + '</span></div>';
-                    hasCat = true;
-                }
+                if (cat) { forestHtml += '<div><span class="category-tag ' + cat.cls + '">' + cat.text + '</span></div>'; hasForest = true; }
                 var area = findField(aj, ['Plocha', 'PLOCHA', 'plocha']);
-                if (area) {
-                    var ha = (parseFloat(area) / 10000).toFixed(2);
-                    html += '<div class="area">' + ha + ' ha</div>';
+                if (area) { forestHtml += '<div class="area">' + (parseFloat(area) / 10000).toFixed(2) + ' ha</div>'; }
+            }
+
+            if (hasForest) {
+                html += '<div class="section-label section-forest">FOREST</div>';
+                html += forestHtml;
+            }
+
+            // ---- GEOLOGY section ----
+            // From the real response, the useful data is in results where value contains the description.
+            // Fields: value (the main description text), Vek1 (age), Útvar (formation period)
+            // We skip line/boundary layers (LAYER=H1 etc.) and only show area descriptions.
+            if (data.geo && data.geo.results && data.geo.results.length > 0) {
+                var geoHtml = '';
+                var seen = {};
+                data.geo.results.forEach(function(r) {
+                    var a = r.attributes;
+                    // The main description is in r.value (the identify result value)
+                    var desc = r.value || findField(a, ['NAZOV','Nazov','POPIS','Popis','LABEL','Label']);
+                    // Skip line features / boundaries (they have short codes like "H1", "geologicke hranice")
+                    if (!desc || desc.length < 10) return;
+                    // Deduplicate
+                    if (seen[desc]) return;
+                    seen[desc] = true;
+
+                    var vek = findField(a, ['Vek1','VEK1','Vek','VEK','Age']);
+                    var utvar = findField(a, ['Útvar','Utvar','UTVAR']);
+
+                    geoHtml += '<div class="geo-name">' + desc + '</div>';
+                    var ageParts = [];
+                    if (utvar) ageParts.push(utvar);
+                    if (vek) ageParts.push(vek);
+                    if (ageParts.length > 0) geoHtml += '<div class="geo-age">' + ageParts.join(' / ') + '</div>';
+
+                    hasGeo = true;
+                });
+
+                if (hasGeo) {
+                    html += '<div class="section-label section-geology">GEOLOGY</div>';
+                    html += geoHtml;
                 }
             }
 
-            // --- Geology from GM50 ---
-            var hasGeo = false;
-            if (data.geo && data.geo.results && data.geo.results.length > 0) {
-                hasGeo = true;
-                if (hasType || hasCat) html += '<hr class="divider">';
-                html += '<div class="section-label">Geology</div>';
-                data.geo.results.forEach(function(r, i) {
-                    var a = r.attributes;
-                    if (i > 0) html += '<hr class="divider">';
-                    // Try common field names for rock/formation name
-                    var name = findField(a, ['NAZOV','Nazov','nazov','NAME','Name','POPIS','Popis',
-                        'HORNINA','Hornina','LITOLOGIA','Litologia','ROCK_TYPE','Rock_Type',
-                        'FORMATION','Formation','FORMACIA','Formacia','LABEL','Label']);
-                    var age = findField(a, ['VEK','Vek','vek','AGE','Age','STRATIG','Stratig',
-                        'OBDOBIE','Obdobie','PERIOD','Period','ERA','Era','EPOCH','Epoch']);
-                    var litho = findField(a, ['LITOTYP','Litotyp','LITOLOGIA','Litologia',
-                        'ROCK','Rock','HORNINY','Horniny','DESCRIPTION','Description',
-                        'POPIS_ENG','POPIS_SK','Popis_SK']);
-                    var layerName = r.layerName || '';
-
-                    if (name) {
-                        html += '<div class="geo-name">' + name + '</div>';
-                    } else if (layerName) {
-                        html += '<div class="geo-name">' + layerName + '</div>';
-                    }
-                    if (age) html += '<div class="geo-detail">Age: ' + age + '</div>';
-                    if (litho && litho !== name) html += '<div class="geo-detail">' + litho + '</div>';
-
-                    // Show remaining non-trivial fields
-                    var shown = ['NAZOV','Nazov','nazov','NAME','Name','POPIS','Popis',
-                        'HORNINA','Hornina','LITOLOGIA','Litologia','ROCK_TYPE','Rock_Type',
-                        'FORMATION','Formation','FORMACIA','Formacia','LABEL','Label',
-                        'VEK','Vek','vek','AGE','Age','STRATIG','Stratig',
-                        'OBDOBIE','Obdobie','PERIOD','Period','ERA','Era','EPOCH','Epoch',
-                        'LITOTYP','Litotyp','ROCK','Rock','HORNINY','Horniny',
-                        'DESCRIPTION','Description','POPIS_ENG','POPIS_SK','Popis_SK',
-                        'OBJECTID','FID','Shape','SHAPE','Shape_Length','Shape_Area',
-                        'SHAPE_Length','SHAPE_Area','SHAPE.AREA','SHAPE.LEN'];
-                    Object.keys(a).forEach(function(k) {
-                        if (shown.indexOf(k) !== -1) return;
-                        var v = a[k];
-                        if (v === null || v === '' || v === 'Null') return;
-                        html += '<div class="geo-detail"><b>' + k + ':</b> ' + v + '</div>';
-                    });
-                });
-            }
-
-            if (!hasType && !hasCat && !hasGeo) {
+            if (!hasForest && !hasGeo) {
                 html += '<p class="error">No data here.<br>Zoom in and tap a forest or geological area.</p>';
-            }
-
-            // Show errors for debugging
-            var errKeys = Object.keys(errors);
-            if (errKeys.length > 0) {
-                html += '<div style="margin-top:6px;font-size:11px;color:#c00;">';
-                errKeys.forEach(function(k) { html += k + ': ' + errors[k] + '<br>'; });
-                html += '</div>';
             }
 
             html += '</div>';
@@ -304,28 +303,19 @@
         }
 
         map.on('click', function(e) {
-            var popup = L.popup({ maxWidth: 300, maxHeight: 350 })
+            var popup = L.popup({ maxWidth: 300, maxHeight: 400 })
                 .setLatLng(e.latlng)
                 .setContent('<div class="fi"><p class="loading">Loading...</p></div>')
                 .openOn(map);
 
-            var data = {}, errors = {}, done = 0;
+            var data = {}, done = 0;
             identifySources.forEach(function(src) {
-                var url = identifyUrl(src, e.latlng);
-                console.log('[identify] ' + src.key + ':', url);
-                fetchJson(url)
-                    .then(function(j) {
-                        console.log('[identify] ' + src.key + ' result:', j);
-                        data[src.key] = j;
-                    })
-                    .catch(function(err) {
-                        console.error('[identify] ' + src.key + ' FAILED:', err);
-                        data[src.key] = null;
-                        errors[src.key] = err.message || 'failed';
-                    })
+                fetchJson(identifyUrl(src, e.latlng))
+                    .then(function(j) { data[src.key] = j; })
+                    .catch(function() { data[src.key] = null; })
                     .finally(function() {
                         if (++done === identifySources.length)
-                            popup.setContent(buildPopup(data, errors));
+                            popup.setContent(buildPopup(data));
                     });
             });
         });
@@ -341,7 +331,6 @@
             var progress = document.getElementById('save-progress');
             progress.style.display = 'block';
 
-            // Collect all tile URLs for current view + a few zoom levels
             var urls = [];
             for (var z = minZ; z <= maxZ; z++) {
                 var min = latLngToTile(b.getSouthWest(), z);
@@ -354,8 +343,7 @@
                 }
             }
 
-            // Also pre-query forest data on a grid across the visible area
-            var gridStep = 0.005; // ~500m grid
+            var gridStep = 0.005;
             var identifyUrls = [];
             for (var lat = b.getSouth(); lat <= b.getNorth(); lat += gridStep) {
                 for (var lng = b.getWest(); lng <= b.getEast(); lng += gridStep) {
@@ -368,7 +356,7 @@
 
             var total = urls.length + identifyUrls.length;
             var loaded = 0;
-            progress.textContent = 'Caching 0/' + total + ' (tiles + forest data)...';
+            progress.textContent = 'Caching 0/' + total + '...';
 
             if (total > 10000) {
                 progress.textContent = 'Area too large (' + total + ' items). Zoom in more.';
@@ -381,26 +369,24 @@
                 progress.textContent = 'Caching ' + loaded + '/' + total + '...';
             }
 
-            // Cache tiles then forest data
             caches.open('forest-tiles-v1').then(function(tileCache) {
                 var queue = urls.slice();
                 var batch = 6;
 
                 function nextTile() {
-                    if (queue.length === 0) return cacheForestData();
+                    if (queue.length === 0) return cacheData();
                     var chunk = queue.splice(0, batch);
                     return Promise.all(chunk.map(function(u) {
                         return tileCache.add(u).catch(function() {}).then(updateProgress);
                     })).then(nextTile);
                 }
 
-                function cacheForestData() {
-                    progress.textContent = loaded + '/' + total + ' — caching forest data...';
+                function cacheData() {
+                    progress.textContent = loaded + '/' + total + ' — caching data...';
                     var dq = identifyUrls.slice();
-
                     function nextData() {
                         if (dq.length === 0) {
-                            progress.textContent = 'Done! ' + total + ' items saved for offline.';
+                            progress.textContent = 'Done! ' + total + ' items saved.';
                             setTimeout(function() { progress.style.display = 'none'; }, 2500);
                             return;
                         }
