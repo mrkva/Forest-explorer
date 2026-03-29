@@ -325,8 +325,8 @@
                 var a = data.lestypy.results[0].attributes;
                 var hlavny = findField(a, ['Hlavny_lesny_typ', 'Hlavny lesny typ', 'HLAVNY_LESNY_TYP',
                     'Nazov_lesneho_typu_1', 'Nazov lesneho typu 1', 'NAZOV_LESNEHO_TYPU_1',
-                    'nazov_lesneho_typu_1', 'Nazov_lesneho_typu', 'NAZOV']);
-                var hslt = findField(a, ['Nazov_HSLT', 'Nazov HSLT', 'NAZOV_HSLT', 'nazov_hslt', 'HSLT']);
+                    'nazov_lesneho_typu_1', 'Nazov_lesneho_typu', 'NAZOV', 'hlLT', 'NLT1']);
+                var hslt = findField(a, ['Nazov_HSLT', 'Nazov HSLT', 'NAZOV_HSLT', 'nazov_hslt', 'HSLT', 'NHSLT']);
                 if (hlavny) { forestHtml += '<div class="type-name">' + hlavny + '</div>'; hasForest = true; }
                 if (hslt) { forestHtml += '<div class="hslt-name">' + hslt + '</div>'; hasForest = true; }
             }

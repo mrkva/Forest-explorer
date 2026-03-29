@@ -43,7 +43,7 @@ SOURCES = {
     },
     'lestypy': {
         'url': 'https://gis.nlcsk.org/arcgis/rest/services/Inspire/LesneTypy/MapServer/0/query',
-        'fields': '*',
+        'fields': 'NLT1,NHSLT,hlLT,KAT,OBJECTID',
         'group': 'forest',
     },
     'geo': {
