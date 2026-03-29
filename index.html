@@ -44,6 +44,15 @@
         #opacity-control input[type="range"] {
             width: 140px;
         }
+
+        /* Feature info popup */
+        .forest-info { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-size: 13px; max-width: 280px; }
+        .forest-info h3 { margin: 0 0 6px; font-size: 15px; }
+        .forest-info table { border-collapse: collapse; width: 100%; }
+        .forest-info td { padding: 2px 6px; border-bottom: 1px solid #eee; }
+        .forest-info td:first-child { font-weight: 600; white-space: nowrap; color: #555; }
+        .forest-info .loading { color: #888; font-style: italic; }
+        .forest-info .error { color: #c00; }
     </style>
 </head>
 <body>
@@ -161,6 +170,146 @@
 
         // Scale control
         L.control.scale({ imperial: false }).addTo(map);
+
+        // --- GetFeatureInfo on click ---
+        // WMS endpoints to query (forest stands + tree composition)
+        var featureInfoSources = [
+            {
+                name: 'Forest stand',
+                url: 'https://gis.nlcsk.org/arcgis/services/MPRV/JPRL_ZBGIS/MapServer/WMSServer',
+                layers: '0'
+            },
+            {
+                name: 'Tree species',
+                url: 'https://gis.nlcsk.org/arcgis/services/Inspire/DrevinoveZlozenie/MapServer/WmsServer',
+                layers: '0'
+            }
+        ];
+
+        function buildGetFeatureInfoUrl(source, latlng) {
+            var point = map.latLngToContainerPoint(latlng);
+            var size = map.getSize();
+            var bounds = map.getBounds();
+            var sw = map.options.crs.project(bounds.getSouthWest());
+            var ne = map.options.crs.project(bounds.getNorthEast());
+            var bbox = [sw.x, sw.y, ne.x, ne.y].join(',');
+
+            var params = {
+                SERVICE: 'WMS',
+                REQUEST: 'GetFeatureInfo',
+                VERSION: '1.1.1',
+                LAYERS: source.layers,
+                QUERY_LAYERS: source.layers,
+                INFO_FORMAT: 'application/json',
+                SRS: 'EPSG:3857',
+                BBOX: bbox,
+                WIDTH: size.x,
+                HEIGHT: size.y,
+                X: Math.round(point.x),
+                Y: Math.round(point.y)
+            };
+
+            var qs = Object.keys(params).map(function(k) {
+                return k + '=' + encodeURIComponent(params[k]);
+            }).join('&');
+
+            return source.url + '?' + qs;
+        }
+
+        // Friendly labels for common JPRL/composition fields
+        var fieldLabels = {
+            // JPRL fields
+            'PORAST': 'Stand ID',
+            'PLOCHA': 'Area (ha)',
+            'DREVIN': 'Main species',
+            'VEK': 'Age (years)',
+            'ZAKMENENIE': 'Stocking',
+            'BONITA': 'Site quality',
+            'HOSPSP': 'Management',
+            'LESNA_OBL': 'Forest region',
+            'LHC': 'Management unit',
+            'ETAZ': 'Storey',
+            'ZASTUP': 'Share (%)',
+            'SKUP_LT': 'Forest type group',
+            // Species composition
+            'DREVINA': 'Species',
+            'ZASTUPENIE': 'Share (%)',
+            'POCEL': 'Sub-compartment'
+        };
+
+        // Fields to skip (internal/uninformative)
+        var skipFields = ['OBJECTID', 'SHAPE', 'Shape', 'SHAPE.AREA', 'SHAPE.LEN',
+            'SHAPE_Length', 'SHAPE_Area', 'FID', 'OBJECTID_1'];
+
+        function formatFeatureInfo(name, data) {
+            if (!data || !data.features || data.features.length === 0) {
+                return '';
+            }
+            var html = '<h3>' + name + '</h3><table>';
+            var props = data.features[0].properties || {};
+            var keys = Object.keys(props);
+            keys.forEach(function(key) {
+                if (skipFields.indexOf(key) !== -1) return;
+                var val = props[key];
+                if (val === null || val === '' || val === 'Null') return;
+                var label = fieldLabels[key] || key;
+                html += '<tr><td>' + label + '</td><td>' + val + '</td></tr>';
+            });
+            html += '</table>';
+
+            // If multiple features (e.g. multiple species in composition), show them all
+            if (data.features.length > 1) {
+                for (var i = 1; i < data.features.length; i++) {
+                    var p = data.features[i].properties || {};
+                    html += '<table style="margin-top:4px;border-top:2px solid #ccc;padding-top:4px;">';
+                    Object.keys(p).forEach(function(key) {
+                        if (skipFields.indexOf(key) !== -1) return;
+                        var val = p[key];
+                        if (val === null || val === '' || val === 'Null') return;
+                        var label = fieldLabels[key] || key;
+                        html += '<tr><td>' + label + '</td><td>' + val + '</td></tr>';
+                    });
+                    html += '</table>';
+                }
+            }
+            return html;
+        }
+
+        map.on('click', function(e) {
+            var popup = L.popup({ maxWidth: 300, maxHeight: 400 })
+                .setLatLng(e.latlng)
+                .setContent('<div class="forest-info"><p class="loading">Querying forest data...</p></div>')
+                .openOn(map);
+
+            var results = [];
+            var done = 0;
+
+            featureInfoSources.forEach(function(source, idx) {
+                var url = buildGetFeatureInfoUrl(source, e.latlng);
+                fetch(url)
+                    .then(function(r) { return r.json(); })
+                    .then(function(data) {
+                        results[idx] = formatFeatureInfo(source.name, data);
+                    })
+                    .catch(function() {
+                        results[idx] = '';
+                    })
+                    .finally(function() {
+                        done++;
+                        if (done === featureInfoSources.length) {
+                            var html = '<div class="forest-info">';
+                            var combined = results.join('');
+                            if (combined) {
+                                html += combined;
+                            } else {
+                                html += '<p class="error">No forest data at this location.<br>Try zooming in and clicking on a colored forest area.</p>';
+                            }
+                            html += '</div>';
+                            popup.setContent(html);
+                        }
+                    });
+            });
+        });
     </script>
 </body>
 </html>
