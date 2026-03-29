@@ -5,16 +5,18 @@ Queries ArcGIS REST API for features within each z12 tile covering Slovakia,
 saves results as GeoJSON files under data/{source}/{z}/{x}/{y}.json.
 
 Usage:
-    python3 scripts/generate_tiles.py [--source jprl|lestypy|geo] [--resume]
+    python3 scripts/generate_tiles.py [--source jprl|lestypy|geo] [--workers 4]
 
 Requires: Python 3.6+ (stdlib only, no dependencies)
 """
 
 import argparse
+import concurrent.futures
 import json
 import math
 import os
 import sys
+import threading
 import time
 import urllib.error
 import urllib.parse
@@ -30,10 +32,11 @@ OUTPUT_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file
 # Geometry simplification tolerance in degrees (~200m at Slovak latitudes)
 MAX_OFFSET = 0.002
 
-# Rate limiting
-REQUEST_DELAY = 0.15  # seconds between requests per source
 MAX_RETRIES = 3
-RETRY_DELAY = 5  # seconds
+RETRY_DELAY = 3  # seconds
+
+# File that tracks empty tiles so we don't re-query them
+EMPTY_MANIFEST = '.empty_tiles'
 
 SOURCES = {
     'jprl': {
@@ -74,8 +77,8 @@ def tile_bounds(x, y, z):
 
 def get_tiles():
     """Get all z12 tiles covering Slovakia."""
-    x_min, y_min = latlng_to_tile(SK_NORTH, SK_WEST, ZOOM)  # NW corner
-    x_max, y_max = latlng_to_tile(SK_SOUTH, SK_EAST, ZOOM)  # SE corner
+    x_min, y_min = latlng_to_tile(SK_NORTH, SK_WEST, ZOOM)
+    x_max, y_max = latlng_to_tile(SK_SOUTH, SK_EAST, ZOOM)
     tiles = []
     for x in range(x_min, x_max + 1):
         for y in range(y_min, y_max + 1):
@@ -95,13 +98,16 @@ def fetch_json(url):
                 data = json.loads(resp.read().decode('utf-8'))
 
             if 'error' in data:
-                print(f"  API error: {json.dumps(data['error'], ensure_ascii=False)}")
+                err = json.dumps(data['error'], ensure_ascii=False)
+                if attempt < MAX_RETRIES - 1:
+                    time.sleep(RETRY_DELAY * (attempt + 1))
+                    continue
+                print(f"  API error: {err}")
                 return None
 
             return data
         except (urllib.error.URLError, urllib.error.HTTPError, OSError) as e:
             if attempt < MAX_RETRIES - 1:
-                print(f"  Retry {attempt + 1}/{MAX_RETRIES}: {e}")
                 time.sleep(RETRY_DELAY * (attempt + 1))
             else:
                 print(f"  Failed after {MAX_RETRIES} attempts: {e}")
@@ -114,6 +120,7 @@ def query_features(source_url, bbox, fields, simplify=MAX_OFFSET):
     all_features = []
     result_offset = 0
     first_request = True
+    last_data = None
 
     while True:
         params = {
@@ -128,7 +135,6 @@ def query_features(source_url, bbox, fields, simplify=MAX_OFFSET):
             'maxAllowableOffset': str(simplify),
             'f': 'json',
         }
-        # Only add resultOffset for pagination (some servers reject it)
         if not first_request:
             params['resultOffset'] = str(result_offset)
 
@@ -139,22 +145,22 @@ def query_features(source_url, bbox, fields, simplify=MAX_OFFSET):
         if not data:
             break
 
+        last_data = data
         features = data.get('features', [])
         all_features.extend(features)
 
-        # If exceededTransferLimit is true, there are more results to fetch
-        if data.get('exceededTransferLimit'):
+        if data.get('exceededTransferLimit') and features:
             result_offset += len(features)
-            time.sleep(REQUEST_DELAY)
         else:
             break
 
-    return {'features': all_features, 'fieldAliases': data.get('fieldAliases', {})} if all_features else None
+    if all_features and last_data:
+        return {'features': all_features, 'fieldAliases': last_data.get('fieldAliases', {})}
+    return None
 
 
 def arcgis_to_geojson(data):
     """Convert ArcGIS JSON response to GeoJSON FeatureCollection."""
-    # Build alias map: field_name -> alias (e.g. 'popis' -> 'Popis')
     aliases = data.get('fieldAliases', {})
 
     features = []
@@ -171,7 +177,6 @@ def arcgis_to_geojson(data):
             'coordinates': rings,
         }
 
-        # Remap field names to their aliases for consistent naming
         clean_attrs = {}
         for k, v in attrs.items():
             if v is None or v == 'Null' or v == '':
@@ -188,48 +193,105 @@ def arcgis_to_geojson(data):
     return {'type': 'FeatureCollection', 'features': features}
 
 
-def generate_source(name, source, resume=False):
-    """Generate all tiles for a single data source."""
+def load_empty_set(source_dir):
+    """Load the set of tiles known to be empty."""
+    path = os.path.join(source_dir, EMPTY_MANIFEST)
+    if os.path.exists(path):
+        with open(path) as f:
+            return set(f.read().split())
+    return set()
+
+
+def save_empty_set(source_dir, empty_set):
+    """Persist the set of empty tile keys."""
+    path = os.path.join(source_dir, EMPTY_MANIFEST)
+    os.makedirs(source_dir, exist_ok=True)
+    with open(path, 'w') as f:
+        f.write('\n'.join(sorted(empty_set)))
+
+
+def generate_source(name, source, num_workers=4):
+    """Generate all tiles for a single data source using parallel workers."""
     tiles = get_tiles()
     out_dir = os.path.join(OUTPUT_DIR, name, str(ZOOM))
     total = len(tiles)
-    saved = 0
+
+    # Load known empty tiles for resume
+    source_dir = os.path.join(OUTPUT_DIR, name)
+    empty_set = load_empty_set(source_dir)
+
+    # Filter to tiles that need work
+    todo = []
     skipped = 0
+    for (x, y) in tiles:
+        tile_key = f'{x}/{y}'
+        tile_path = os.path.join(out_dir, str(x), f'{y}.json')
+        if os.path.exists(tile_path):
+            skipped += 1
+        elif tile_key in empty_set:
+            skipped += 1
+        else:
+            todo.append((x, y))
+
+    print(f"\n=== {name} === ({total} tiles, {skipped} cached, {len(todo)} to fetch)")
+
+    if not todo:
+        print("  Nothing to do!")
+        return 0
+
+    saved = 0
     empty = 0
+    errors = 0
+    lock = threading.Lock()
+    start_time = time.time()
 
-    print(f"\n=== {name} === ({total} tiles)")
-
-    for i, (x, y) in enumerate(tiles):
+    def process_tile(xy):
+        nonlocal saved, empty, errors
+        x, y = xy
         tile_dir = os.path.join(out_dir, str(x))
         tile_path = os.path.join(tile_dir, f'{y}.json')
-
-        if resume and os.path.exists(tile_path):
-            skipped += 1
-            continue
 
         bbox = tile_bounds(x, y, ZOOM)
         data = query_features(source['url'], bbox, source['fields'])
 
-        if data and data.get('features'):
-            geojson = arcgis_to_geojson(data)
-            if geojson['features']:
-                os.makedirs(tile_dir, exist_ok=True)
-                with open(tile_path, 'w') as f:
-                    json.dump(geojson, f, separators=(',', ':'))
-                saved += 1
-            else:
+        with lock:
+            if data and data.get('features'):
+                geojson = arcgis_to_geojson(data)
+                if geojson['features']:
+                    os.makedirs(tile_dir, exist_ok=True)
+                    with open(tile_path, 'w') as f:
+                        json.dump(geojson, f, separators=(',', ':'))
+                    saved += 1
+                    return 'saved'
+                else:
+                    empty_set.add(f'{x}/{y}')
+                    empty += 1
+                    return 'empty'
+            elif data is not None:
+                # Query succeeded but returned no features
+                empty_set.add(f'{x}/{y}')
                 empty += 1
-        else:
-            empty += 1
+                return 'empty'
+            else:
+                errors += 1
+                return 'error'
 
-        # Progress
-        done = i + 1
-        if done % 50 == 0 or done == total:
-            print(f"  [{done}/{total}] saved={saved} empty={empty} skipped={skipped}")
+    done = 0
+    with concurrent.futures.ThreadPoolExecutor(max_workers=num_workers) as pool:
+        futures = {pool.submit(process_tile, xy): xy for xy in todo}
+        for future in concurrent.futures.as_completed(futures):
+            done += 1
+            if done % 25 == 0 or done == len(todo):
+                elapsed = time.time() - start_time
+                rate = done / elapsed if elapsed > 0 else 0
+                eta = (len(todo) - done) / rate if rate > 0 else 0
+                print(f"  [{done}/{len(todo)}] saved={saved} empty={empty} err={errors}"
+                      f"  ({rate:.1f}/s, ETA {int(eta)}s)")
 
-        time.sleep(REQUEST_DELAY)
+    # Save empty manifest for future resume
+    save_empty_set(source_dir, empty_set)
 
-    print(f"  Done: {saved} tiles saved, {empty} empty, {skipped} skipped")
+    print(f"  Done: {saved} saved, {empty} empty, {errors} errors, {skipped} skipped")
     return saved
 
 
@@ -237,8 +299,8 @@ def main():
     parser = argparse.ArgumentParser(description='Generate static data tiles')
     parser.add_argument('--source', choices=list(SOURCES.keys()),
                         help='Generate tiles for a specific source only')
-    parser.add_argument('--resume', action='store_true',
-                        help='Skip tiles that already exist')
+    parser.add_argument('--workers', type=int, default=4,
+                        help='Number of parallel workers (default: 4)')
     parser.add_argument('--dry-run', action='store_true',
                         help='Show tile count without fetching')
     args = parser.parse_args()
@@ -256,7 +318,7 @@ def main():
     total_saved = 0
 
     for name, source in sources.items():
-        total_saved += generate_source(name, source, resume=args.resume)
+        total_saved += generate_source(name, source, num_workers=args.workers)
 
     print(f"\nAll done! {total_saved} tiles generated in {OUTPUT_DIR}/")
 
