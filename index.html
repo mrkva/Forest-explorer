@@ -19,16 +19,28 @@
         .leaflet-control-layers { max-height: 80vh; overflow-y: auto; }
         .leaflet-control-layers-expanded { padding: 8px 12px; }
         .leaflet-control-layers label { font-size: 14px; padding: 2px 0; }
-        .leaflet-control-layers-separator { border-top: 2px solid #ccc !important; margin: 6px 0 !important; }
 
-        #opacity-control {
+        /* Per-layer opacity panel */
+        #opacity-panel {
             position: absolute; bottom: 30px; left: 10px; z-index: 1000;
-            background: white; border-radius: 8px; padding: 10px 14px;
+            background: white; border-radius: 8px; padding: 0;
             box-shadow: 0 2px 8px rgba(0,0,0,0.3);
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-size: 13px;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-size: 12px;
+            max-height: 60vh; overflow-y: auto;
         }
-        #opacity-control label { display: block; margin-bottom: 4px; font-weight: 600; }
-        #opacity-control input[type="range"] { width: 140px; }
+        #opacity-toggle {
+            padding: 8px 14px; font-weight: 600; cursor: pointer; font-size: 13px;
+            user-select: none; display: flex; align-items: center; gap: 6px;
+        }
+        #opacity-toggle .arrow { font-size: 10px; transition: transform 0.2s; }
+        #opacity-toggle .arrow.open { transform: rotate(90deg); }
+        #opacity-sliders {
+            display: none; padding: 0 12px 10px; border-top: 1px solid #eee;
+        }
+        .opacity-row { display: flex; align-items: center; gap: 6px; padding: 4px 0; }
+        .opacity-row .lbl { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 12px; }
+        .opacity-row input[type="range"] { width: 80px; }
+        .opacity-row .pct { width: 30px; text-align: right; font-size: 11px; color: #888; }
 
         /* Popup */
         .fi { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-size: 14px; max-width: 280px; line-height: 1.5; }
@@ -45,12 +57,11 @@
         .fi .cat-O { background: #059669; }
         .fi .cat-U { background: #7c3aed; }
         .fi .area { font-size: 13px; color: #777; }
-        .fi .geo-name { font-size: 15px; font-weight: 600; color: #8b5e3c; margin: 4px 0; }
-        .fi .geo-age { font-size: 13px; color: #666; }
+        .fi .geo-name { font-size: 15px; font-weight: 600; color: #8b5e3c; margin: 4px 0 2px; }
+        .fi .geo-age { font-size: 13px; color: #666; margin-bottom: 6px; }
         .fi .loading { color: #888; font-style: italic; }
         .fi .error { color: #666; }
 
-        /* Save area button - bottom right */
         #save-area {
             position: absolute; bottom: 30px; right: 10px; z-index: 1000;
             background: #1a5c1a; color: white; border: none; border-radius: 8px;
@@ -72,9 +83,9 @@
     <div id="map"></div>
     <button id="save-area">Save offline</button>
     <div id="save-progress"></div>
-    <div id="opacity-control">
-        <label>Overlay opacity: <span id="opacity-value">70%</span></label>
-        <input type="range" id="opacity-slider" min="0" max="100" value="70">
+    <div id="opacity-panel">
+        <div id="opacity-toggle"><span class="arrow">&#9654;</span> Layer opacity</div>
+        <div id="opacity-sliders"></div>
     </div>
 
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
@@ -102,66 +113,86 @@
         var nlcAttr = '&copy; <a href="https://web.nlcsk.org">NLC</a>';
         var geoAttr = '&copy; <a href="https://www.geology.sk">SGÚDŠ</a>';
 
-        // Forest overlays
-        var jprl = wms("https://gis.nlcsk.org/arcgis/services/MPRV/JPRL_ZBGIS/MapServer/WMSServer",
-            nlcAttr, { layers: '0', version: '1.1.1' }).addTo(map);
-        var drevinoveZlozenie = wms("https://gis.nlcsk.org/arcgis/services/Inspire/DrevinoveZlozenie/MapServer/WmsServer", nlcAttr, { layers: '0' });
-        var lesneTypy = wms("https://gis.nlcsk.org/arcgis/services/Inspire/LesneTypy/MapServer/WMSServer", nlcAttr, { layers: '0' });
-        var lesneCesty = wms("https://gis.nlcsk.org/arcgis/services/Inspire/LesneCesty/MapServer/WMSServer", nlcAttr, { layers: '0' });
-        var lhc = wms("https://gis.nlcsk.org/arcgis/services/Inspire/LHC/MapServer/WMSServer", nlcAttr, { layers: '0' });
-        var lesneOblasti = wms("https://gis.nlcsk.org/arcgis/services/Inspire/LesneOblasti/MapServer/WMSServer", nlcAttr, { layers: '0' });
+        // Named layers for opacity control
+        var layers = [
+            { id: 'jprl', name: 'Forest stands', layer: wms("https://gis.nlcsk.org/arcgis/services/MPRV/JPRL_ZBGIS/MapServer/WMSServer", nlcAttr, { layers: '0', version: '1.1.1' }), on: true },
+            { id: 'drev', name: 'Tree species', layer: wms("https://gis.nlcsk.org/arcgis/services/Inspire/DrevinoveZlozenie/MapServer/WmsServer", nlcAttr, { layers: '0' }), on: false },
+            { id: 'ltyp', name: 'Forest types', layer: wms("https://gis.nlcsk.org/arcgis/services/Inspire/LesneTypy/MapServer/WMSServer", nlcAttr, { layers: '0' }), on: false },
+            { id: 'lces', name: 'Forest roads', layer: wms("https://gis.nlcsk.org/arcgis/services/Inspire/LesneCesty/MapServer/WMSServer", nlcAttr, { layers: '0' }), on: false },
+            { id: 'lhc',  name: 'Management units', layer: wms("https://gis.nlcsk.org/arcgis/services/Inspire/LHC/MapServer/WMSServer", nlcAttr, { layers: '0' }), on: false },
+            { id: 'lobl', name: 'Forest regions', layer: wms("https://gis.nlcsk.org/arcgis/services/Inspire/LesneOblasti/MapServer/WMSServer", nlcAttr, { layers: '0' }), on: false },
+            { id: 'geo',  name: 'Geological map', layer: wms("https://ags.geology.sk/arcgis/services/WebServices/GM50/MapServer/WMSServer", geoAttr, { layers: '0', version: '1.1.1' }), on: true },
+            { id: 'igr',  name: 'Engineering-geo', layer: wms("https://ags.geology.sk/arcgis/services/WebServices/IGR50/MapServer/WMSServer", geoAttr, { layers: '0', version: '1.1.1' }), on: false },
+            { id: 'loz',  name: 'Mineral deposits', layer: wms("https://ags.geology.sk/arcgis/services/WebServices/LOZISKA/MapServer/WMSServer", geoAttr, { layers: '0', version: '1.1.1' }), on: false }
+        ];
 
-        // Geology overlays
-        var geoMap = wms("https://ags.geology.sk/arcgis/services/WebServices/GM50/MapServer/WMSServer",
-            geoAttr, { layers: '0', version: '1.1.1' }).addTo(map);
-        var geoIGR = wms("https://ags.geology.sk/arcgis/services/WebServices/IGR50/MapServer/WMSServer",
-            geoAttr, { layers: '0', version: '1.1.1' });
-        var geoDeposits = wms("https://ags.geology.sk/arcgis/services/WebServices/LOZISKA/MapServer/WMSServer",
-            geoAttr, { layers: '0', version: '1.1.1' });
+        layers.forEach(function(l) { if (l.on) l.layer.addTo(map); });
 
-        var allWmsLayers = [jprl, drevinoveZlozenie, lesneTypy, lesneCesty, lhc, lesneOblasti,
-                            geoMap, geoIGR, geoDeposits];
+        // Build layer control overlays with group headers
+        var forestOverlays = {};
+        var geoOverlays = {};
+        layers.forEach(function(l, i) {
+            if (i < 6) forestOverlays[l.name] = l.layer;
+            else geoOverlays[l.name] = l.layer;
+        });
 
-        // Use two separate layer controls for grouped categories
-        // Leaflet doesn't support group headers in layer control natively,
-        // so we add overlays with prefixed names and use a custom separator
-        var forestOverlays = {
-            "Forest stands (JPRL)": jprl,
-            "Tree species": drevinoveZlozenie,
-            "Forest types": lesneTypy,
-            "Forest roads": lesneCesty,
-            "Management units": lhc,
-            "Forest regions": lesneOblasti
-        };
-        var geoOverlays = {
-            "Geological map 1:50k": geoMap,
-            "Engineering-geo 1:50k": geoIGR,
-            "Mineral deposits": geoDeposits
-        };
-
-        // Add a single control but inject group headers after creation
-        var layerControl = L.control.layers(
+        L.control.layers(
             { "OpenStreetMap": osm, "Satellite": satellite },
             Object.assign({}, forestOverlays, geoOverlays),
             { collapsed: true }
         ).addTo(map);
 
-        // Inject group headers into the layer control
+        // Inject group headers
         setTimeout(function() {
             var container = document.querySelector('.leaflet-control-layers-overlays');
             if (!container) return;
             var labels = container.querySelectorAll('label');
-            // Find the first geology label (after 6 forest labels)
             if (labels.length > 6) {
-                var forestHeader = document.createElement('div');
-                forestHeader.innerHTML = '<strong style="font-size:12px;color:#1a5c1a;display:block;padding:4px 0 2px;">FOREST</strong>';
-                container.insertBefore(forestHeader, labels[0]);
-
-                var geoHeader = document.createElement('div');
-                geoHeader.innerHTML = '<hr style="margin:6px 0;border:none;border-top:2px solid #ccc;"><strong style="font-size:12px;color:#8b5e3c;display:block;padding:2px 0;">GEOLOGY</strong>';
-                container.insertBefore(geoHeader, labels[6]);
+                var fh = document.createElement('div');
+                fh.innerHTML = '<strong style="font-size:12px;color:#1a5c1a;display:block;padding:4px 0 2px;">FOREST</strong>';
+                container.insertBefore(fh, labels[0]);
+                var gh = document.createElement('div');
+                gh.innerHTML = '<hr style="margin:6px 0;border:none;border-top:2px solid #ccc;"><strong style="font-size:12px;color:#8b5e3c;display:block;padding:2px 0;">GEOLOGY</strong>';
+                container.insertBefore(gh, labels[6]);
             }
         }, 100);
+
+        // Per-layer opacity control
+        var opacityToggle = document.getElementById('opacity-toggle');
+        var opacitySliders = document.getElementById('opacity-sliders');
+        var opacityOpen = false;
+
+        opacityToggle.addEventListener('click', function() {
+            opacityOpen = !opacityOpen;
+            opacitySliders.style.display = opacityOpen ? 'block' : 'none';
+            opacityToggle.querySelector('.arrow').classList.toggle('open', opacityOpen);
+            if (opacityOpen) buildOpacitySliders();
+        });
+
+        function buildOpacitySliders() {
+            opacitySliders.innerHTML = '';
+            layers.forEach(function(l) {
+                if (!map.hasLayer(l.layer)) return;
+                var row = document.createElement('div');
+                row.className = 'opacity-row';
+                var pct = Math.round(l.layer.options.opacity * 100);
+                row.innerHTML = '<span class="lbl">' + l.name + '</span>'
+                    + '<input type="range" min="0" max="100" value="' + pct + '">'
+                    + '<span class="pct">' + pct + '%</span>';
+                var slider = row.querySelector('input');
+                var pctSpan = row.querySelector('.pct');
+                slider.addEventListener('input', function() {
+                    l.layer.setOpacity(this.value / 100);
+                    pctSpan.textContent = this.value + '%';
+                });
+                opacitySliders.appendChild(row);
+            });
+        }
+
+        // Rebuild sliders when layers change
+        map.on('overlayadd overlayremove', function() {
+            if (opacityOpen) buildOpacitySliders();
+        });
 
         // Geolocation
         map.locate({ setView: false, maxZoom: 14, enableHighAccuracy: true });
@@ -170,22 +201,16 @@
                 .addTo(map).bindPopup("You are here").openPopup();
         });
 
-        // Opacity
-        document.getElementById('opacity-slider').addEventListener('input', function() {
-            var v = this.value / 100;
-            document.getElementById('opacity-value').textContent = this.value + '%';
-            allWmsLayers.forEach(function(l) { l.setOpacity(v); });
-        });
-
         L.control.scale({ imperial: false }).addTo(map);
 
         // =============================================
         // Click-to-identify
         // =============================================
+        // Only query polygon layer (layerId 2 = Plochy) for geology — skip lines entirely
         var identifySources = [
             { key: 'jprl',    url: 'https://gis.nlcsk.org/arcgis/rest/services/MPRV/JPRL_ZBGIS/MapServer/identify' },
             { key: 'lestypy', url: 'https://gis.nlcsk.org/arcgis/rest/services/Inspire/LesneTypy/MapServer/identify' },
-            { key: 'geo',     url: 'https://ags.geology.sk/arcgis/rest/services/WebServices/GM50/MapServer/identify', layers: 'all', tolerance: '15' }
+            { key: 'geo',     url: 'https://ags.geology.sk/arcgis/rest/services/WebServices/GM50/MapServer/identify', layers: 'all:2', tolerance: '3' }
         ];
 
         var categoryLabels = {
@@ -229,50 +254,37 @@
             var html = '<div class="fi">';
             var hasForest = false, hasGeo = false;
 
-            // ---- FOREST section ----
+            // ---- FOREST ----
             var forestHtml = '';
-
-            // Forest type from LesneTypy
             if (data.lestypy && data.lestypy.results && data.lestypy.results.length > 0) {
                 var a = data.lestypy.results[0].attributes;
                 var hlavny = findField(a, ['Hlavny_lesny_typ', 'Hlavny lesny typ', 'HLAVNY_LESNY_TYP',
                     'Nazov_lesneho_typu_1', 'Nazov lesneho typu 1', 'NAZOV_LESNEHO_TYPU_1',
                     'nazov_lesneho_typu_1', 'Nazov_lesneho_typu', 'NAZOV']);
                 var hslt = findField(a, ['Nazov_HSLT', 'Nazov HSLT', 'NAZOV_HSLT', 'nazov_hslt', 'HSLT']);
-
                 if (hlavny) { forestHtml += '<div class="type-name">' + hlavny + '</div>'; hasForest = true; }
                 if (hslt) { forestHtml += '<div class="hslt-name">' + hslt + '</div>'; hasForest = true; }
             }
-
-            // Category + area from JPRL
             if (data.jprl && data.jprl.results && data.jprl.results.length > 0) {
                 var aj = data.jprl.results[0].attributes;
                 var kl = findField(aj, ['KL', 'kl']);
                 var cat = kl ? categoryLabels[kl] : null;
                 if (cat) { forestHtml += '<div><span class="category-tag ' + cat.cls + '">' + cat.text + '</span></div>'; hasForest = true; }
                 var area = findField(aj, ['Plocha', 'PLOCHA', 'plocha']);
-                if (area) { forestHtml += '<div class="area">' + (parseFloat(area) / 10000).toFixed(2) + ' ha</div>'; }
+                if (area) forestHtml += '<div class="area">' + (parseFloat(area) / 10000).toFixed(2) + ' ha</div>';
             }
-
             if (hasForest) {
-                html += '<div class="section-label section-forest">FOREST</div>';
-                html += forestHtml;
+                html += '<div class="section-label section-forest">FOREST</div>' + forestHtml;
             }
 
-            // ---- GEOLOGY section ----
-            // Only polygon features (layerName "Plochy"), using Popis for description
+            // ---- GEOLOGY ----
             if (data.geo && data.geo.results && data.geo.results.length > 0) {
                 var geoHtml = '';
                 var seen = {};
                 data.geo.results.forEach(function(r) {
-                    // Only polygon layer (Plochy), skip lines (Línie)
-                    if (r.layerName !== 'Plochy') return;
                     var a = r.attributes;
-
                     var popis = a['Popis'] || a['popis'] || a['POPIS'] || '';
                     if (!popis || popis === '-') return;
-
-                    // Deduplicate by Popis text
                     if (seen[popis]) return;
                     seen[popis] = true;
 
@@ -286,20 +298,16 @@
                     if (vek1 && vek1 !== '-') details.push(vek1);
                     if (suvrstvie && suvrstvie !== '-') details.push(suvrstvie);
                     if (details.length > 0) geoHtml += '<div class="geo-age">' + details.join(' · ') + '</div>';
-
                     hasGeo = true;
                 });
-
                 if (hasGeo) {
-                    html += '<div class="section-label section-geology">GEOLOGY</div>';
-                    html += geoHtml;
+                    html += '<div class="section-label section-geology">GEOLOGY</div>' + geoHtml;
                 }
             }
 
             if (!hasForest && !hasGeo) {
                 html += '<p class="error">No data here.<br>Zoom in and tap a forest or geological area.</p>';
             }
-
             html += '</div>';
             return html;
         }
@@ -345,7 +353,8 @@
                 }
             }
 
-            var gridStep = 0.005;
+            // Coarser grid for offline data pre-fetch (~1km)
+            var gridStep = 0.01;
             var identifyUrls = [];
             for (var lat = b.getSouth(); lat <= b.getNorth(); lat += gridStep) {
                 for (var lng = b.getWest(); lng <= b.getEast(); lng += gridStep) {
@@ -374,7 +383,6 @@
             caches.open('forest-tiles-v1').then(function(tileCache) {
                 var queue = urls.slice();
                 var batch = 6;
-
                 function nextTile() {
                     if (queue.length === 0) return cacheData();
                     var chunk = queue.splice(0, batch);
@@ -382,7 +390,6 @@
                         return tileCache.add(u).catch(function() {}).then(updateProgress);
                     })).then(nextTile);
                 }
-
                 function cacheData() {
                     progress.textContent = loaded + '/' + total + ' — caching data...';
                     var dq = identifyUrls.slice();
@@ -399,7 +406,6 @@
                     }
                     return nextData();
                 }
-
                 return nextTile();
             });
         });
