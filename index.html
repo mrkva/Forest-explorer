@@ -264,39 +264,65 @@
                 }
             }
 
-            // Also cache WMS tiles for current view
-            // WMS tiles are auto-cached by the service worker as you browse
+            // Also pre-query forest data on a grid across the visible area
+            var gridStep = 0.005; // ~500m grid
+            var identifyUrls = [];
+            for (var lat = b.getSouth(); lat <= b.getNorth(); lat += gridStep) {
+                for (var lng = b.getWest(); lng <= b.getEast(); lng += gridStep) {
+                    var ll = L.latLng(lat, lng);
+                    identifySources.forEach(function(src) {
+                        identifyUrls.push(identifyUrl(src, ll));
+                    });
+                }
+            }
 
-            var total = urls.length;
+            var total = urls.length + identifyUrls.length;
             var loaded = 0;
-            progress.textContent = 'Caching 0/' + total + ' tiles...';
+            progress.textContent = 'Caching 0/' + total + ' (tiles + forest data)...';
 
-            if (total > 5000) {
-                progress.textContent = 'Area too large (' + total + ' tiles). Zoom in more.';
+            if (total > 10000) {
+                progress.textContent = 'Area too large (' + total + ' items). Zoom in more.';
                 setTimeout(function() { progress.style.display = 'none'; }, 3000);
                 return;
             }
 
-            // Use service worker cache
-            caches.open('forest-tiles-v1').then(function(cache) {
-                var batch = 6; // concurrent requests
-                var queue = urls.slice();
+            function updateProgress() {
+                loaded++;
+                progress.textContent = 'Caching ' + loaded + '/' + total + '...';
+            }
 
-                function next() {
-                    if (queue.length === 0) {
-                        progress.textContent = 'Done! ' + total + ' tiles saved.';
-                        setTimeout(function() { progress.style.display = 'none'; }, 2000);
-                        return;
-                    }
+            // Cache tiles then forest data
+            caches.open('forest-tiles-v1').then(function(tileCache) {
+                var queue = urls.slice();
+                var batch = 6;
+
+                function nextTile() {
+                    if (queue.length === 0) return cacheForestData();
                     var chunk = queue.splice(0, batch);
-                    Promise.all(chunk.map(function(u) {
-                        return cache.add(u).catch(function() {}).then(function() {
-                            loaded++;
-                            progress.textContent = 'Caching ' + loaded + '/' + total + ' tiles...';
-                        });
-                    })).then(next);
+                    return Promise.all(chunk.map(function(u) {
+                        return tileCache.add(u).catch(function() {}).then(updateProgress);
+                    })).then(nextTile);
                 }
-                next();
+
+                function cacheForestData() {
+                    progress.textContent = loaded + '/' + total + ' — caching forest data...';
+                    var dq = identifyUrls.slice();
+
+                    function nextData() {
+                        if (dq.length === 0) {
+                            progress.textContent = 'Done! ' + total + ' items saved for offline.';
+                            setTimeout(function() { progress.style.display = 'none'; }, 2500);
+                            return;
+                        }
+                        var chunk = dq.splice(0, 4);
+                        return Promise.all(chunk.map(function(u) {
+                            return fetchJson(u).catch(function() {}).then(updateProgress);
+                        })).then(nextData);
+                    }
+                    return nextData();
+                }
+
+                return nextTile();
             });
         });
 
