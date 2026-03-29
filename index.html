@@ -260,41 +260,32 @@
             }
 
             // ---- GEOLOGY section ----
-            // The description (e.g. "fluviálne sedimenty: ...") comes from r.value
-            // Skip line/boundary layers (layerName like "H1", short values)
+            // Only polygon features (layerName "Plochy"), using Popis for description
             if (data.geo && data.geo.results && data.geo.results.length > 0) {
                 var geoHtml = '';
                 var seen = {};
-                var skipLayers = ['H1','H2','H3','H4','H5','H6','H7','H8','H9','H10'];
                 data.geo.results.forEach(function(r) {
+                    // Only polygon layer (Plochy), skip lines (Línie)
+                    if (r.layerName !== 'Plochy') return;
                     var a = r.attributes;
-                    var ln = r.layerName || '';
-                    // Skip boundary/line layers
-                    if (skipLayers.indexOf(ln) !== -1) return;
 
-                    // Get the main description - try r.value first, then attribute fields
-                    var desc = r.value || '';
-                    if (!desc || desc.length < 5) {
-                        // Try all string attribute values to find the long description
-                        Object.keys(a).forEach(function(k) {
-                            var v = a[k];
-                            if (typeof v === 'string' && v.length > 20 && !desc) desc = v;
-                        });
-                    }
-                    if (!desc || desc.length < 5) return;
+                    var popis = a['Popis'] || a['popis'] || a['POPIS'] || '';
+                    if (!popis || popis === '-') return;
 
-                    // Deduplicate
-                    if (seen[desc]) return;
-                    seen[desc] = true;
+                    // Deduplicate by Popis text
+                    if (seen[popis]) return;
+                    seen[popis] = true;
 
-                    var vek = findField(a, ['Vek1','VEK1','Vek','VEK','Age']);
-                    var utvar = findField(a, ['Útvar','Utvar','UTVAR']);
+                    var utvar = a['Útvar'] || a['Utvar'] || '';
+                    var vek1 = a['Vek1'] || a['vek1'] || '';
+                    var suvrstvie = a['Súvrstvie'] || a['Suvrstvie'] || '';
 
-                    geoHtml += '<div class="geo-name">' + desc + '</div>';
-                    var ageParts = [];
-                    if (utvar) ageParts.push(utvar);
-                    if (vek) ageParts.push(vek);
-                    if (ageParts.length > 0) geoHtml += '<div class="geo-age">' + ageParts.join(' / ') + '</div>';
+                    geoHtml += '<div class="geo-name">' + popis + '</div>';
+                    var details = [];
+                    if (utvar && utvar !== '-') details.push(utvar);
+                    if (vek1 && vek1 !== '-') details.push(vek1);
+                    if (suvrstvie && suvrstvie !== '-') details.push(suvrstvie);
+                    if (details.length > 0) geoHtml += '<div class="geo-age">' + details.join(' · ') + '</div>';
 
                     hasGeo = true;
                 });
