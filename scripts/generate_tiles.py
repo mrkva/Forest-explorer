@@ -37,7 +37,7 @@ RETRY_DELAY = 5  # seconds
 
 SOURCES = {
     'jprl': {
-        'url': 'https://gis.nlcsk.org/arcgis/rest/services/MPRV/JPRL_ZBGIS/MapServer/0/query',
+        'url': 'https://gis.nlcsk.org/arcgis/rest/services/MPRV/JPRL_ZBGIS/MapServer/1/query',
         'fields': 'KL,Plocha,OBJECTID',
         'group': 'forest',
     },
