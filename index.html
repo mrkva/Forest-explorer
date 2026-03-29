@@ -122,18 +122,8 @@
               layer: wms("https://gis.nlcsk.org/arcgis/services/Inspire/DrevinoveZlozenie/MapServer/WmsServer", nlcAttr, { layers: '0' }), on: false },
             { id: 'ltyp', name: 'Forest types', group: 'forest', source: 'NLC', sourceUrl: 'https://web.nlcsk.org',
               layer: wms("https://gis.nlcsk.org/arcgis/services/Inspire/LesneTypy/MapServer/WMSServer", nlcAttr, { layers: '0' }), on: false },
-            { id: 'lces', name: 'Forest roads', group: 'forest', source: 'NLC', sourceUrl: 'https://web.nlcsk.org',
-              layer: wms("https://gis.nlcsk.org/arcgis/services/Inspire/LesneCesty/MapServer/WMSServer", nlcAttr, { layers: '0' }), on: false },
-            { id: 'lhc',  name: 'Management units', group: 'forest', source: 'NLC', sourceUrl: 'https://web.nlcsk.org',
-              layer: wms("https://gis.nlcsk.org/arcgis/services/Inspire/LHC/MapServer/WMSServer", nlcAttr, { layers: '0' }), on: false },
-            { id: 'lobl', name: 'Forest regions', group: 'forest', source: 'NLC', sourceUrl: 'https://web.nlcsk.org',
-              layer: wms("https://gis.nlcsk.org/arcgis/services/Inspire/LesneOblasti/MapServer/WMSServer", nlcAttr, { layers: '0' }), on: false },
             { id: 'geo',  name: 'Geological map 1:50k', group: 'geology', source: 'SGÚDŠ', sourceUrl: 'https://www.geology.sk',
-              layer: wms("https://ags.geology.sk/arcgis/services/WebServices/GM50/MapServer/WMSServer", geoAttr, { layers: '0', version: '1.1.1' }), on: false },
-            { id: 'igr',  name: 'Engineering-geo 1:50k', group: 'geology', source: 'SGÚDŠ', sourceUrl: 'https://www.geology.sk',
-              layer: wms("https://ags.geology.sk/arcgis/services/WebServices/IGR50/MapServer/WMSServer", geoAttr, { layers: '0', version: '1.1.1' }), on: false },
-            { id: 'loz',  name: 'Mineral deposits', group: 'geology', source: 'SGÚDŠ', sourceUrl: 'https://www.geology.sk',
-              layer: wms("https://ags.geology.sk/arcgis/services/WebServices/LOZISKA/MapServer/WMSServer", geoAttr, { layers: '0', version: '1.1.1' }), on: false }
+              layer: wms("https://ags.geology.sk/arcgis/services/WebServices/GM50/MapServer/WMSServer", geoAttr, { layers: '0', version: '1.1.1' }), on: false }
         ];
 
         layers.forEach(function(l) { if (l.on) l.layer.addTo(map); });
