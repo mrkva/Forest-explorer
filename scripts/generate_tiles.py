@@ -83,22 +83,8 @@ def get_tiles():
     return tiles
 
 
-def query_features(source_url, bbox, fields, offset=MAX_OFFSET):
-    """Query ArcGIS MapServer for features within a bounding box."""
-    west, south, east, north = bbox
-    params = {
-        'where': '1=1',
-        'geometry': f'{west},{south},{east},{north}',
-        'geometryType': 'esriGeometryEnvelope',
-        'spatialRel': 'esriSpatialRelIntersects',
-        'outFields': fields,
-        'returnGeometry': 'true',
-        'outSR': '4326',
-        'maxAllowableOffset': str(offset),
-        'f': 'json',
-    }
-    url = source_url + '?' + urllib.parse.urlencode(params)
-
+def fetch_json(url):
+    """Fetch a URL and return parsed JSON, with retries."""
     for attempt in range(MAX_RETRIES):
         try:
             req = urllib.request.Request(url, headers={
@@ -120,6 +106,44 @@ def query_features(source_url, bbox, fields, offset=MAX_OFFSET):
             else:
                 print(f"  Failed after {MAX_RETRIES} attempts: {e}")
                 return None
+
+
+def query_features(source_url, bbox, fields, simplify=MAX_OFFSET):
+    """Query ArcGIS MapServer for features within a bounding box, with pagination."""
+    west, south, east, north = bbox
+    all_features = []
+    result_offset = 0
+
+    while True:
+        params = {
+            'where': '1=1',
+            'geometry': f'{west},{south},{east},{north}',
+            'geometryType': 'esriGeometryEnvelope',
+            'spatialRel': 'esriSpatialRelIntersects',
+            'outFields': fields,
+            'returnGeometry': 'true',
+            'outSR': '4326',
+            'maxAllowableOffset': str(simplify),
+            'resultOffset': str(result_offset),
+            'f': 'json',
+        }
+        url = source_url + '?' + urllib.parse.urlencode(params)
+        data = fetch_json(url)
+
+        if not data:
+            break
+
+        features = data.get('features', [])
+        all_features.extend(features)
+
+        # If exceededTransferLimit is true, there are more results to fetch
+        if data.get('exceededTransferLimit'):
+            result_offset += len(features)
+            time.sleep(REQUEST_DELAY)
+        else:
+            break
+
+    return {'features': all_features} if all_features else None
 
 
 def arcgis_to_geojson(data):
