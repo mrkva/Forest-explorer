@@ -48,7 +48,7 @@ SOURCES = {
     },
     'geo': {
         'url': 'https://ags.geology.sk/arcgis/rest/services/WebServices/GM50/MapServer/2/query',
-        'fields': 'Popis,Útvar,Vek1,Súvrstvie,OBJECTID',
+        'fields': 'popis,utv,vek1,ksuvrstvie,objectid',
         'group': 'geology',
     },
 }
@@ -95,7 +95,7 @@ def fetch_json(url):
                 data = json.loads(resp.read().decode('utf-8'))
 
             if 'error' in data:
-                print(f"  API error: {data['error'].get('message', data['error'])}")
+                print(f"  API error: {json.dumps(data['error'], ensure_ascii=False)}")
                 return None
 
             return data
