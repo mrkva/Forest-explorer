@@ -1,7 +1,7 @@
 {
-  "name": "Forest Explorer SK",
-  "short_name": "Forest SK",
-  "description": "Slovak forest map with WMS overlays",
+  "name": "Habitat Explorer SK",
+  "short_name": "Habitat SK",
+  "description": "Slovak habitat map — forest and geology data overlays",
   "start_url": ".",
   "display": "standalone",
   "background_color": "#ffffff",

@@ -5,11 +5,11 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <meta name="apple-mobile-web-app-title" content="Forest SK">
+    <meta name="apple-mobile-web-app-title" content="Habitat SK">
     <meta name="theme-color" content="#1a5c1a">
     <link rel="manifest" href="manifest.json">
     <link rel="apple-touch-icon" href="icon-192.png">
-    <title>Forest Explorer SK</title>
+    <title>Habitat Explorer SK</title>
     <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
@@ -34,9 +34,7 @@
         }
         #opacity-toggle .arrow { font-size: 10px; transition: transform 0.2s; }
         #opacity-toggle .arrow.open { transform: rotate(90deg); }
-        #opacity-sliders {
-            display: none; padding: 0 12px 10px; border-top: 1px solid #eee;
-        }
+        #opacity-sliders { display: none; padding: 0 12px 10px; border-top: 1px solid #eee; }
         .opacity-row { display: flex; align-items: center; gap: 6px; padding: 4px 0; }
         .opacity-row .lbl { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-size: 12px; }
         .opacity-row input[type="range"] { width: 80px; }
@@ -61,6 +59,11 @@
         .fi .geo-age { font-size: 13px; color: #666; margin-bottom: 6px; }
         .fi .loading { color: #888; font-style: italic; }
         .fi .error { color: #666; }
+
+        /* Layer control source links */
+        .source-link { font-size: 10px; color: #999; display: block; padding: 0 0 2px 22px; }
+        .source-link a { color: #888; text-decoration: none; }
+        .source-link a:hover { text-decoration: underline; }
 
         #save-area {
             position: absolute; bottom: 30px; right: 10px; z-index: 1000;
@@ -113,26 +116,34 @@
         var nlcAttr = '&copy; <a href="https://web.nlcsk.org">NLC</a>';
         var geoAttr = '&copy; <a href="https://www.geology.sk">SGÚDŠ</a>';
 
-        // Named layers for opacity control
+        // Layer definitions: group, source info, default state
         var layers = [
-            { id: 'jprl', name: 'Forest stands', layer: wms("https://gis.nlcsk.org/arcgis/services/MPRV/JPRL_ZBGIS/MapServer/WMSServer", nlcAttr, { layers: '0', version: '1.1.1' }), on: true },
-            { id: 'drev', name: 'Tree species', layer: wms("https://gis.nlcsk.org/arcgis/services/Inspire/DrevinoveZlozenie/MapServer/WmsServer", nlcAttr, { layers: '0' }), on: false },
-            { id: 'ltyp', name: 'Forest types', layer: wms("https://gis.nlcsk.org/arcgis/services/Inspire/LesneTypy/MapServer/WMSServer", nlcAttr, { layers: '0' }), on: false },
-            { id: 'lces', name: 'Forest roads', layer: wms("https://gis.nlcsk.org/arcgis/services/Inspire/LesneCesty/MapServer/WMSServer", nlcAttr, { layers: '0' }), on: false },
-            { id: 'lhc',  name: 'Management units', layer: wms("https://gis.nlcsk.org/arcgis/services/Inspire/LHC/MapServer/WMSServer", nlcAttr, { layers: '0' }), on: false },
-            { id: 'lobl', name: 'Forest regions', layer: wms("https://gis.nlcsk.org/arcgis/services/Inspire/LesneOblasti/MapServer/WMSServer", nlcAttr, { layers: '0' }), on: false },
-            { id: 'geo',  name: 'Geological map', layer: wms("https://ags.geology.sk/arcgis/services/WebServices/GM50/MapServer/WMSServer", geoAttr, { layers: '0', version: '1.1.1' }), on: true },
-            { id: 'igr',  name: 'Engineering-geo', layer: wms("https://ags.geology.sk/arcgis/services/WebServices/IGR50/MapServer/WMSServer", geoAttr, { layers: '0', version: '1.1.1' }), on: false },
-            { id: 'loz',  name: 'Mineral deposits', layer: wms("https://ags.geology.sk/arcgis/services/WebServices/LOZISKA/MapServer/WMSServer", geoAttr, { layers: '0', version: '1.1.1' }), on: false }
+            { id: 'jprl', name: 'Forest stands', group: 'forest', source: 'NLC', sourceUrl: 'https://web.nlcsk.org',
+              layer: wms("https://gis.nlcsk.org/arcgis/services/MPRV/JPRL_ZBGIS/MapServer/WMSServer", nlcAttr, { layers: '0', version: '1.1.1' }), on: true },
+            { id: 'drev', name: 'Tree species', group: 'forest', source: 'NLC', sourceUrl: 'https://web.nlcsk.org',
+              layer: wms("https://gis.nlcsk.org/arcgis/services/Inspire/DrevinoveZlozenie/MapServer/WmsServer", nlcAttr, { layers: '0' }), on: false },
+            { id: 'ltyp', name: 'Forest types', group: 'forest', source: 'NLC', sourceUrl: 'https://web.nlcsk.org',
+              layer: wms("https://gis.nlcsk.org/arcgis/services/Inspire/LesneTypy/MapServer/WMSServer", nlcAttr, { layers: '0' }), on: false },
+            { id: 'lces', name: 'Forest roads', group: 'forest', source: 'NLC', sourceUrl: 'https://web.nlcsk.org',
+              layer: wms("https://gis.nlcsk.org/arcgis/services/Inspire/LesneCesty/MapServer/WMSServer", nlcAttr, { layers: '0' }), on: false },
+            { id: 'lhc',  name: 'Management units', group: 'forest', source: 'NLC', sourceUrl: 'https://web.nlcsk.org',
+              layer: wms("https://gis.nlcsk.org/arcgis/services/Inspire/LHC/MapServer/WMSServer", nlcAttr, { layers: '0' }), on: false },
+            { id: 'lobl', name: 'Forest regions', group: 'forest', source: 'NLC', sourceUrl: 'https://web.nlcsk.org',
+              layer: wms("https://gis.nlcsk.org/arcgis/services/Inspire/LesneOblasti/MapServer/WMSServer", nlcAttr, { layers: '0' }), on: false },
+            { id: 'geo',  name: 'Geological map 1:50k', group: 'geology', source: 'SGÚDŠ', sourceUrl: 'https://www.geology.sk',
+              layer: wms("https://ags.geology.sk/arcgis/services/WebServices/GM50/MapServer/WMSServer", geoAttr, { layers: '0', version: '1.1.1' }), on: false },
+            { id: 'igr',  name: 'Engineering-geo 1:50k', group: 'geology', source: 'SGÚDŠ', sourceUrl: 'https://www.geology.sk',
+              layer: wms("https://ags.geology.sk/arcgis/services/WebServices/IGR50/MapServer/WMSServer", geoAttr, { layers: '0', version: '1.1.1' }), on: false },
+            { id: 'loz',  name: 'Mineral deposits', group: 'geology', source: 'SGÚDŠ', sourceUrl: 'https://www.geology.sk',
+              layer: wms("https://ags.geology.sk/arcgis/services/WebServices/LOZISKA/MapServer/WMSServer", geoAttr, { layers: '0', version: '1.1.1' }), on: false }
         ];
 
         layers.forEach(function(l) { if (l.on) l.layer.addTo(map); });
 
-        // Build layer control overlays with group headers
-        var forestOverlays = {};
-        var geoOverlays = {};
-        layers.forEach(function(l, i) {
-            if (i < 6) forestOverlays[l.name] = l.layer;
+        // Build layer control
+        var forestOverlays = {}, geoOverlays = {};
+        layers.forEach(function(l) {
+            if (l.group === 'forest') forestOverlays[l.name] = l.layer;
             else geoOverlays[l.name] = l.layer;
         });
 
@@ -142,22 +153,30 @@
             { collapsed: true }
         ).addTo(map);
 
-        // Inject group headers
+        // Inject group headers and source links
         setTimeout(function() {
             var container = document.querySelector('.leaflet-control-layers-overlays');
             if (!container) return;
             var labels = container.querySelectorAll('label');
-            if (labels.length > 6) {
+            var forestCount = Object.keys(forestOverlays).length;
+
+            if (labels.length > forestCount) {
+                // Forest header
                 var fh = document.createElement('div');
-                fh.innerHTML = '<strong style="font-size:12px;color:#1a5c1a;display:block;padding:4px 0 2px;">FOREST</strong>';
+                fh.innerHTML = '<strong style="font-size:12px;color:#1a5c1a;display:block;padding:4px 0 2px;">FOREST</strong>'
+                    + '<span class="source-link">Data: <a href="https://web.nlcsk.org" target="_blank">Národné lesnícke centrum</a></span>';
                 container.insertBefore(fh, labels[0]);
+
+                // Geology header
                 var gh = document.createElement('div');
-                gh.innerHTML = '<hr style="margin:6px 0;border:none;border-top:2px solid #ccc;"><strong style="font-size:12px;color:#8b5e3c;display:block;padding:2px 0;">GEOLOGY</strong>';
-                container.insertBefore(gh, labels[6]);
+                gh.innerHTML = '<hr style="margin:6px 0;border:none;border-top:2px solid #ccc;">'
+                    + '<strong style="font-size:12px;color:#8b5e3c;display:block;padding:2px 0;">GEOLOGY</strong>'
+                    + '<span class="source-link">Data: <a href="https://www.geology.sk" target="_blank">Štátny geologický ústav Dionýza Štúra</a></span>';
+                container.insertBefore(gh, labels[forestCount]);
             }
         }, 100);
 
-        // Per-layer opacity control
+        // Per-layer opacity
         var opacityToggle = document.getElementById('opacity-toggle');
         var opacitySliders = document.getElementById('opacity-sliders');
         var opacityOpen = false;
@@ -189,7 +208,6 @@
             });
         }
 
-        // Rebuild sliders when layers change
         map.on('overlayadd overlayremove', function() {
             if (opacityOpen) buildOpacitySliders();
         });
@@ -206,11 +224,10 @@
         // =============================================
         // Click-to-identify
         // =============================================
-        // Only query polygon layer (layerId 2 = Plochy) for geology — skip lines entirely
         var identifySources = [
-            { key: 'jprl',    url: 'https://gis.nlcsk.org/arcgis/rest/services/MPRV/JPRL_ZBGIS/MapServer/identify' },
-            { key: 'lestypy', url: 'https://gis.nlcsk.org/arcgis/rest/services/Inspire/LesneTypy/MapServer/identify' },
-            { key: 'geo',     url: 'https://ags.geology.sk/arcgis/rest/services/WebServices/GM50/MapServer/identify', layers: 'all:2', tolerance: '3' }
+            { key: 'jprl',    group: 'forest', url: 'https://gis.nlcsk.org/arcgis/rest/services/MPRV/JPRL_ZBGIS/MapServer/identify' },
+            { key: 'lestypy', group: 'forest', url: 'https://gis.nlcsk.org/arcgis/rest/services/Inspire/LesneTypy/MapServer/identify' },
+            { key: 'geo',     group: 'geology', url: 'https://ags.geology.sk/arcgis/rest/services/WebServices/GM50/MapServer/identify', layers: 'all:2', tolerance: '3' }
         ];
 
         var categoryLabels = {
@@ -218,6 +235,11 @@
             'O': { text: 'Protective', cls: 'cat-O' },
             'U': { text: 'Special purpose', cls: 'cat-U' }
         };
+
+        // Check if any layer from a group is currently visible
+        function isGroupActive(group) {
+            return layers.some(function(l) { return l.group === group && map.hasLayer(l.layer); });
+        }
 
         function identifyUrl(source, latlng) {
             var b = map.getBounds(), s = map.getSize();
@@ -248,6 +270,12 @@
                 if (v !== undefined && v !== null && v !== '' && v !== 'Null' && v !== '-') return v;
             }
             return null;
+        }
+
+        // In-memory identify cache: round coords to ~100m grid
+        var identifyCache = {};
+        function cacheKey(srcKey, latlng) {
+            return srcKey + ':' + (Math.round(latlng.lat * 1000) / 1000) + ',' + (Math.round(latlng.lng * 1000) / 1000);
         }
 
         function buildPopup(data) {
@@ -313,19 +341,41 @@
         }
 
         map.on('click', function(e) {
+            // Determine which groups are active
+            var forestActive = isGroupActive('forest');
+            var geoActive = isGroupActive('geology');
+            if (!forestActive && !geoActive) return;
+
             var popup = L.popup({ maxWidth: 300, maxHeight: 400 })
                 .setLatLng(e.latlng)
                 .setContent('<div class="fi"><p class="loading">Loading...</p></div>')
                 .openOn(map);
 
-            var data = {}, done = 0;
-            identifySources.forEach(function(src) {
+            // Only query sources whose group has visible layers
+            var activeSources = identifySources.filter(function(src) {
+                if (src.group === 'forest') return forestActive;
+                if (src.group === 'geology') return geoActive;
+                return true;
+            });
+
+            var data = {}, done = 0, total = activeSources.length;
+
+            activeSources.forEach(function(src) {
+                var ck = cacheKey(src.key, e.latlng);
+                // Check in-memory cache
+                if (identifyCache[ck]) {
+                    data[src.key] = identifyCache[ck];
+                    if (++done === total) popup.setContent(buildPopup(data));
+                    return;
+                }
                 fetchJson(identifyUrl(src, e.latlng))
-                    .then(function(j) { data[src.key] = j; })
+                    .then(function(j) {
+                        data[src.key] = j;
+                        identifyCache[ck] = j;
+                    })
                     .catch(function() { data[src.key] = null; })
                     .finally(function() {
-                        if (++done === identifySources.length)
-                            popup.setContent(buildPopup(data));
+                        if (++done === total) popup.setContent(buildPopup(data));
                     });
             });
         });
@@ -353,13 +403,17 @@
                 }
             }
 
-            // Coarser grid for offline data pre-fetch (~1km)
+            // Only pre-fetch identify data for active groups
+            var forestActive = isGroupActive('forest');
+            var geoActive = isGroupActive('geology');
             var gridStep = 0.01;
             var identifyUrls = [];
             for (var lat = b.getSouth(); lat <= b.getNorth(); lat += gridStep) {
                 for (var lng = b.getWest(); lng <= b.getEast(); lng += gridStep) {
                     var ll = L.latLng(lat, lng);
                     identifySources.forEach(function(src) {
+                        if (src.group === 'forest' && !forestActive) return;
+                        if (src.group === 'geology' && !geoActive) return;
                         identifyUrls.push(identifyUrl(src, ll));
                     });
                 }
