@@ -62,9 +62,6 @@
         .fi .source { font-size: 11px; color: #aaa; margin-top: 4px; }
         .fi .source a { color: #999; text-decoration: none; }
         .fi .source a:hover { text-decoration: underline; color: #666; }
-        .fi .more-link { font-size: 12px; margin-top: 2px; }
-        .fi .more-link a { color: #4a90d9; text-decoration: none; }
-        .fi .more-link a:hover { text-decoration: underline; }
 
         #save-area {
             position: absolute; bottom: 30px; right: 10px; z-index: 1000;
@@ -276,10 +273,9 @@
             return srcKey + ':' + (Math.round(latlng.lat * 1000) / 1000) + ',' + (Math.round(latlng.lng * 1000) / 1000);
         }
 
-        function buildPopup(data, latlng) {
+        function buildPopup(data) {
             var html = '<div class="fi">';
             var hasForest = false, hasGeo = false;
-            var lat = latlng.lat.toFixed(5), lng = latlng.lng.toFixed(5);
 
             // ---- FOREST ----
             var forestHtml = '';
@@ -302,7 +298,6 @@
             }
             if (hasForest) {
                 html += '<div class="section-label section-forest">FOREST</div>' + forestHtml;
-                html += '<div class="more-link"><a href="https://gis.nlcsk.org/islhp/" target="_blank">More detail in ISLHP &#8599;</a></div>';
                 html += '<div class="source">Source: <a href="https://web.nlcsk.org" target="_blank">Národné lesnícke centrum</a></div>';
             }
 
@@ -331,7 +326,6 @@
                 });
                 if (hasGeo) {
                     html += '<div class="section-label section-geology">GEOLOGY</div>' + geoHtml;
-                    html += '<div class="more-link"><a href="https://apl.geology.sk/gm50js/" target="_blank">Full geological map &#8599;</a></div>';
                     html += '<div class="source">Source: <a href="https://www.geology.sk" target="_blank">SGÚDŠ</a></div>';
                 }
             }
@@ -368,7 +362,7 @@
                 // Check in-memory cache
                 if (identifyCache[ck]) {
                     data[src.key] = identifyCache[ck];
-                    if (++done === total) popup.setContent(buildPopup(data, e.latlng));
+                    if (++done === total) popup.setContent(buildPopup(data));
                     return;
                 }
                 fetchJson(identifyUrl(src, e.latlng))
@@ -378,7 +372,7 @@
                     })
                     .catch(function() { data[src.key] = null; })
                     .finally(function() {
-                        if (++done === total) popup.setContent(buildPopup(data, e.latlng));
+                        if (++done === total) popup.setContent(buildPopup(data));
                     });
             });
         });
