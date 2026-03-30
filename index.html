@@ -554,8 +554,6 @@
                 var kl = findField(aj, ['KL', 'kl', 'Kategoria lesa', 'Kategoria_lesa']);
                 var cat = kl ? categoryLabels[kl] : null;
                 if (cat) { forestHtml += '<div><span class="category-tag ' + cat.cls + '">' + cat.text + '</span></div>'; hasForest = true; }
-                var vek = findField(aj, ['Vek_porastu', 'Vek porastu', 'VEK_PORASTU', 'vek_porastu', 'VekPor']);
-                if (vek) { forestHtml += '<div class="area">Age: ' + vek + ' years</div>'; hasForest = true; }
                 var area = findField(aj, ['Plocha', 'PLOCHA', 'plocha', 'Vymera v m2', 'Vymera_v_m2']);
                 if (area) {
                     var areaNum = parseFloat(area);

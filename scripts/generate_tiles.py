@@ -41,7 +41,7 @@ EMPTY_MANIFEST = '.empty_tiles'
 SOURCES = {
     'jprl': {
         'url': 'https://gis.nlcsk.org/arcgis/rest/services/MPRV/JPRL_ZBGIS/MapServer/1/query',
-        'fields': 'KL,Plocha,Vek_porastu,OBJECTID',
+        'fields': 'KL,Plocha,OBJECTID',
         'group': 'forest',
     },
     'lestypy': {
