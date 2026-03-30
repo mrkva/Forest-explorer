@@ -341,11 +341,58 @@
             return './data/' + sourceKey + '/' + DATA_TILE_ZOOM + '/' + tile.x + '/' + tile.y + '.json';
         }
 
+        // EUNIS Level 3 mosaic services (ImageServer identify)
+        var EUNIS_MOSAICS = [
+            'https://bio.discomap.eea.europa.eu/arcgis/rest/services/EUNIS/Mosaic_Forest/ImageServer/identify',
+            'https://bio.discomap.eea.europa.eu/arcgis/rest/services/EUNIS/Mosaic_Grassland/ImageServer/identify',
+            'https://bio.discomap.eea.europa.eu/arcgis/rest/services/EUNIS/Mosaic_Heathlands/ImageServer/identify'
+        ];
+
+        function queryEunisLevel3(latlng) {
+            var geom = encodeURIComponent(JSON.stringify({
+                x: latlng.lng, y: latlng.lat,
+                spatialReference: { wkid: 4326 }
+            }));
+            var params = '?geometry=' + geom
+                + '&geometryType=esriGeometryPoint&returnGeometry=false&returnCatalogItems=true&f=json';
+
+            return Promise.all(EUNIS_MOSAICS.map(function(url) {
+                return fetchJson(url + params).catch(function() { return null; });
+            })).then(function(results) {
+                var best = null;
+                results.forEach(function(data) {
+                    if (!data || !data.properties || !data.catalogItems) return;
+                    var values = data.properties.Values;
+                    var items = data.catalogItems.features;
+                    if (!values || !items) return;
+                    for (var i = 0; i < values.length && i < items.length; i++) {
+                        if (values[i] === 'NoData') continue;
+                        var score = parseFloat(values[i]);
+                        if (isNaN(score)) continue;
+                        if (!best || score > best.score) {
+                            var a = items[i].attributes;
+                            if (a.Suit && a.Name_) {
+                                best = { score: score, code: a.Suit, name: a.Name_, desc: a.Descriptio || '' };
+                            }
+                        }
+                    }
+                });
+                return best;
+            });
+        }
+
         // Try data tile first (works offline), fall back to live identify
         function querySource(src, latlng) {
-            // EUNIS has no vector data tiles — go straight to live identify
+            // EUNIS: query Level 2 map + Level 3 mosaics in parallel
             if (src.key === 'eunis') {
-                return fetchJson(identifyUrl(src, latlng));
+                return Promise.all([
+                    fetchJson(identifyUrl(src, latlng)).catch(function() { return { results: [] }; }),
+                    queryEunisLevel3(latlng).catch(function() { return null; })
+                ]).then(function(pair) {
+                    var result = pair[0];
+                    result._level3 = pair[1];
+                    return result;
+                });
             }
             var tileUrl = dataTileUrl(src.key, latlng);
             return fetch(tileUrl).then(function(r) {
@@ -370,15 +417,21 @@
             var hasEunis = false, hasForest = false, hasGeo = false;
 
             // EUNIS habitat
-            if (data.eunis && data.eunis.results && data.eunis.results.length > 0) {
-                var ae = data.eunis.results[0].attributes;
+            if (data.eunis) {
+                var l3 = data.eunis._level3;
+                var ae = (data.eunis.results && data.eunis.results.length > 0) ? data.eunis.results[0].attributes : {};
                 var label = findField(ae, ['Raster.Label', 'Label']);
-                var l1 = findField(ae, ['Raster.EUNIS_L1', 'EUNIS_L1']);
-                if (label) {
+                if (l3 || label) {
                     html += '<div class="section-label section-eunis">HABITAT</div>';
-                    html += '<div class="eunis-label">' + label + '</div>';
-                    if (l1) html += '<div class="eunis-l1">' + l1 + '</div>';
-                    html += '<div class="source">Source: <a href="https://www.eea.europa.eu" target="_blank">EEA Ecosystem Type Map</a></div>';
+                    if (l3) {
+                        html += '<div class="eunis-label">' + l3.code + ' - ' + l3.name + '</div>';
+                        if (label) html += '<div class="eunis-l1">' + label + '</div>';
+                    } else {
+                        html += '<div class="eunis-label">' + label + '</div>';
+                        var l1 = findField(ae, ['Raster.EUNIS_L1', 'EUNIS_L1']);
+                        if (l1) html += '<div class="eunis-l1">' + l1 + '</div>';
+                    }
+                    html += '<div class="source">Source: <a href="https://www.eea.europa.eu" target="_blank">EEA EUNIS Habitat Map</a></div>';
                     hasEunis = true;
                 }
             }
