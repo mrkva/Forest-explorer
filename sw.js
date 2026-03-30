@@ -59,8 +59,8 @@ self.addEventListener('fetch', function(e) {
 
     if (url.indexOf('corsproxy.io') !== -1) return;
 
-    // Data tiles (GeoJSON): cache-first
-    if (url.indexOf('/data/') !== -1 && url.indexOf('.json') !== -1) {
+    // Data tiles (GeoJSON + EUNIS PNG): cache-first
+    if (url.indexOf('/data/') !== -1 && (url.indexOf('.json') !== -1 || url.indexOf('.png') !== -1)) {
         e.respondWith(
             caches.open(CACHE_DATA).then(function(cache) {
                 return cache.match(e.request).then(function(cached) {

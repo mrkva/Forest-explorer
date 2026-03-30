@@ -46,6 +46,9 @@
         .fi .section-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin: 0 0 4px; padding: 3px 0; }
         .fi .section-forest { color: #1a5c1a; border-bottom: 2px solid #1a5c1a; }
         .fi .section-geology { color: #8b5e3c; border-bottom: 2px solid #8b5e3c; margin-top: 10px; }
+        .fi .eunis-label { font-size: 17px; font-weight: 700; color: #2563eb; margin-bottom: 2px; }
+        .fi .eunis-l1 { font-size: 13px; color: #666; margin-bottom: 6px; }
+        .fi .section-eunis { color: #2563eb; border-bottom: 2px solid #2563eb; }
         .fi .type-name { font-size: 17px; font-weight: 700; color: #1a5c1a; margin-bottom: 4px; }
         .fi .hslt-name { font-size: 14px; color: #555; margin-bottom: 6px; }
         .fi .category-tag {
@@ -157,8 +160,11 @@
 
         var nlcAttr = '&copy; <a href="https://web.nlcsk.org">NLC</a>';
         var geoAttr = '&copy; <a href="https://www.geology.sk">SG&Uacute;D&Scaron;</a>';
+        var eeaAttr = '&copy; <a href="https://www.eea.europa.eu">EEA</a>';
 
         var layers = [
+            { id: 'eunis', name: 'EUNIS habitats', group: 'habitat',
+              layer: wms("https://bio.discomap.eea.europa.eu/arcgis/services/Ecosystem/EcosystemTypeMap_v3_1_Terrestrial/MapServer/WMSServer", eeaAttr, { layers: '0' }), on: false },
             { id: 'jprl', name: 'Forest stands', group: 'forest',
               layer: wms("https://gis.nlcsk.org/arcgis/services/MPRV/JPRL_ZBGIS/MapServer/WMSServer", nlcAttr, { layers: '0', version: '1.1.1' }), on: true },
             { id: 'drev', name: 'Tree species', group: 'forest',
@@ -171,15 +177,16 @@
 
         layers.forEach(function(l) { if (l.on) l.layer.addTo(map); });
 
-        var forestOverlays = {}, geoOverlays = {};
+        var habitatOverlays = {}, forestOverlays = {}, geoOverlays = {};
         layers.forEach(function(l) {
-            if (l.group === 'forest') forestOverlays[l.name] = l.layer;
+            if (l.group === 'habitat') habitatOverlays[l.name] = l.layer;
+            else if (l.group === 'forest') forestOverlays[l.name] = l.layer;
             else geoOverlays[l.name] = l.layer;
         });
 
         L.control.layers(
             { "OpenStreetMap": osm, "Satellite": satellite },
-            Object.assign({}, forestOverlays, geoOverlays),
+            Object.assign({}, habitatOverlays, forestOverlays, geoOverlays),
             { collapsed: true }
         ).addTo(map);
 
@@ -187,15 +194,20 @@
             var container = document.querySelector('.leaflet-control-layers-overlays');
             if (!container) return;
             var labels = container.querySelectorAll('label');
-            var forestCount = Object.keys(forestOverlays).length;
-            if (labels.length > forestCount) {
+            var hCount = Object.keys(habitatOverlays).length;
+            var fCount = Object.keys(forestOverlays).length;
+            if (labels.length > 1) {
+                var hh = document.createElement('div');
+                hh.innerHTML = '<strong style="font-size:12px;color:#2563eb;display:block;padding:4px 0 2px;">HABITAT</strong>';
+                container.insertBefore(hh, labels[0]);
                 var fh = document.createElement('div');
-                fh.innerHTML = '<strong style="font-size:12px;color:#1a5c1a;display:block;padding:4px 0 2px;">FOREST</strong>';
-                container.insertBefore(fh, labels[0]);
+                fh.innerHTML = '<hr style="margin:6px 0;border:none;border-top:2px solid #ccc;">'
+                    + '<strong style="font-size:12px;color:#1a5c1a;display:block;padding:2px 0;">FOREST</strong>';
+                container.insertBefore(fh, labels[hCount]);
                 var gh = document.createElement('div');
                 gh.innerHTML = '<hr style="margin:6px 0;border:none;border-top:2px solid #ccc;">'
                     + '<strong style="font-size:12px;color:#8b5e3c;display:block;padding:2px 0;">GEOLOGY</strong>';
-                container.insertBefore(gh, labels[forestCount]);
+                container.insertBefore(gh, labels[hCount + fCount]);
             }
         }, 100);
 
@@ -249,8 +261,9 @@
         });
 
         var identifySources = [
-            { key: 'jprl',    group: 'forest', url: 'https://gis.nlcsk.org/arcgis/rest/services/MPRV/JPRL_ZBGIS/MapServer/identify' },
-            { key: 'lestypy', group: 'forest', url: 'https://gis.nlcsk.org/arcgis/rest/services/Inspire/LesneTypy/MapServer/identify' },
+            { key: 'eunis',   group: 'eunis',   url: 'https://bio.discomap.eea.europa.eu/arcgis/rest/services/Ecosystem/EcosystemTypeMap_v3_1_Terrestrial/MapServer/identify', layers: 'all:0', tolerance: '1' },
+            { key: 'jprl',    group: 'forest',  url: 'https://gis.nlcsk.org/arcgis/rest/services/MPRV/JPRL_ZBGIS/MapServer/identify' },
+            { key: 'lestypy', group: 'forest',  url: 'https://gis.nlcsk.org/arcgis/rest/services/Inspire/LesneTypy/MapServer/identify' },
             { key: 'geo',     group: 'geology', url: 'https://ags.geology.sk/arcgis/rest/services/WebServices/GM50/MapServer/identify', layers: 'all:2', tolerance: '3' }
         ];
 
@@ -328,8 +341,41 @@
             return './data/' + sourceKey + '/' + DATA_TILE_ZOOM + '/' + tile.x + '/' + tile.y + '.json';
         }
 
+        // EUNIS pixel value → label lookup (for offline raster tiles)
+        var EUNIS_LABELS = {
+            0:'No data',11:'E1 - Dry grasslands',12:'E2 - Mesic grasslands',13:'E3 - Seasonally wet and wet grasslands',
+            14:'E4 - Alpine and subalpine grasslands',15:'E5 - Woodland fringes and clearings and tall forb stands',
+            16:'E6 - Inland salt steppes',17:'E7 - Sparsely wooded grasslands',
+            21:'F2 - Arctic, alpine and subalpine scrub',22:'F3 - Temperate and mediterranean-montane scrub',
+            23:'F4 - Temperate shrub heathland',24:'F5 - Maquis, arborescent matorral and thermo-Mediterranean brushes',
+            25:'F6 - Garrigue',26:'F7 - Spiny Mediterranean heaths',27:'F9 - Riverine and fen scrubs',
+            28:'FA - Hedgerows',29:'FB - Shrub plantations',
+            31:'G1 - Broadleaved deciduous woodland',32:'G2 - Broadleaved evergreen woodland',
+            33:'G3 - Coniferous woodland',34:'G4 - Mixed deciduous and coniferous woodland',
+            35:'G5 - Lines of trees, small anthropogenic woodlands, recently felled woodland, early-stage woodland',
+            41:'H2 - Screes',42:'H3 - Inland cliffs, rock pavements and outcrops',43:'H5 - Miscellaneous inland habitats with very sparse or no vegetation',
+            51:'J1 - Buildings of cities, towns and villages',52:'J2 - Low density buildings',
+            53:'J3 - Extractive industrial sites',54:'J4 - Transport networks and other constructed hard-surfaced areas',
+            55:'J5 - Highly artificial man-made waters and associated structures',56:'J6 - Waste deposits',
+            61:'C1 - Surface standing waters',62:'C2 - Surface running waters',63:'C3 - Littoral zone of inland surface waterbodies',
+            71:'D1 - Raised and blanket bogs',72:'D2 - Valley mires, poor fens and transition mires',
+            73:'D4 - Base-rich fens and calcareous spring mires',74:'D5 - Sedge and reedbeds, normally without free-standing water',
+            81:'I1 - Arable land and market gardens',82:'I2 - Cultivated areas of gardens and parks',
+            91:'V - Marine habitats (in terrestrial dataset)',
+            54:'J1 - Buildings of cities, towns and villages'
+        };
+
         // Try data tile first (works offline), fall back to live identify
         function querySource(src, latlng) {
+            // EUNIS raster tiles: read pixel value from cached PNG
+            if (src.key === 'eunis') {
+                return queryEunisOffline(latlng).then(function(result) {
+                    if (result) return result;
+                    return fetchJson(identifyUrl(src, latlng));
+                }).catch(function() {
+                    return fetchJson(identifyUrl(src, latlng));
+                });
+            }
             var tileUrl = dataTileUrl(src.key, latlng);
             return fetch(tileUrl).then(function(r) {
                 if (!r.ok) throw new Error(r.status);
@@ -339,8 +385,55 @@
                 if (feature) return { results: [{ attributes: feature.properties }] };
                 return { results: [] };
             }).catch(function() {
-                // Data tile not available, fall back to live identify
                 return fetchJson(identifyUrl(src, latlng));
+            });
+        }
+
+        // Read EUNIS raster tile (PNG) and look up pixel value
+        function queryEunisOffline(latlng) {
+            var tile = latLngToTile(latlng, DATA_TILE_ZOOM);
+            var tileUrl = './data/eunis/' + DATA_TILE_ZOOM + '/' + tile.x + '/' + tile.y + '.png';
+            return fetch(tileUrl).then(function(r) {
+                if (!r.ok) throw new Error(r.status);
+                return r.blob();
+            }).then(function(blob) {
+                return createImageBitmap(blob);
+            }).then(function(img) {
+                // Calculate pixel position within tile
+                var n = Math.pow(2, DATA_TILE_ZOOM);
+                var latRad = latlng.lat * Math.PI / 180;
+                var xFloat = (latlng.lng + 180) / 360 * n;
+                var yFloat = (1 - Math.log(Math.tan(latRad) + 1 / Math.cos(latRad)) / Math.PI) / 2 * n;
+                var px = Math.floor((xFloat - tile.x) * img.width);
+                var py = Math.floor((yFloat - tile.y) * img.height);
+                px = Math.max(0, Math.min(px, img.width - 1));
+                py = Math.max(0, Math.min(py, img.height - 1));
+
+                var canvas = document.createElement('canvas');
+                canvas.width = img.width; canvas.height = img.height;
+                var ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0);
+                var pixel = ctx.getImageData(px, py, 1, 1).data;
+                // Pixel value stored in red channel
+                var val = pixel[0];
+                var label = EUNIS_LABELS[val];
+                if (!label || val === 0) return null;
+                // Parse label "X1 - Description" into parts
+                var parts = label.split(' - ');
+                var code = parts[0];
+                var name = parts.slice(1).join(' - ');
+                var l1code = code.charAt(0);
+                var l1map = {C:'C - inland surface waters',D:'D - mires, bogs and fens',
+                    E:'E - grasslands and lands dominated by forbs, mosses or lichens',
+                    F:'F - heathland, scrub and tundra',G:'G - woodland, forest and other wooded land',
+                    H:'H - inland unvegetated or sparsely vegetated habitats',
+                    I:'I - regularly or recently cultivated agricultural, horticultural and domestic habitats',
+                    J:'J - constructed, industrial and other artificial habitats',V:'V - marine habitats'};
+                return { results: [{ attributes: {
+                    'Raster.Label': label,
+                    'Raster.EUNIS': code,
+                    'Raster.EUNIS_L1': l1map[l1code] || ''
+                }}]};
             });
         }
 
@@ -351,7 +444,21 @@
 
         function buildPopup(data) {
             var html = '<div class="fi">';
-            var hasForest = false, hasGeo = false;
+            var hasEunis = false, hasForest = false, hasGeo = false;
+
+            // EUNIS habitat
+            if (data.eunis && data.eunis.results && data.eunis.results.length > 0) {
+                var ae = data.eunis.results[0].attributes;
+                var label = findField(ae, ['Raster.Label', 'Label']);
+                var l1 = findField(ae, ['Raster.EUNIS_L1', 'EUNIS_L1']);
+                if (label) {
+                    html += '<div class="section-label section-eunis">HABITAT</div>';
+                    html += '<div class="eunis-label">' + label + '</div>';
+                    if (l1) html += '<div class="eunis-l1">' + l1 + '</div>';
+                    html += '<div class="source">Source: <a href="https://www.eea.europa.eu" target="_blank">EEA Ecosystem Type Map</a></div>';
+                    hasEunis = true;
+                }
+            }
 
             var forestHtml = '';
             if (data.lestypy && data.lestypy.results && data.lestypy.results.length > 0) {
@@ -402,7 +509,7 @@
                 }
             }
 
-            if (!hasForest && !hasGeo) {
+            if (!hasEunis && !hasForest && !hasGeo) {
                 html += '<p class="error">No data here.<br>Zoom in and tap a colored area.</p>';
             }
             html += '</div>';
@@ -529,7 +636,7 @@
             var ne = L.latLng(SK.north, SK.east);
             var sources = ['jprl', 'lestypy', 'geo'];
 
-            // Data tiles (z12)
+            // Data tiles (z12) — vector JSON + EUNIS raster PNG
             var tMin = latLngToTile(sw, DATA_TILE_ZOOM);
             var tMax = latLngToTile(ne, DATA_TILE_ZOOM);
             var dataUrls = [];
@@ -538,6 +645,7 @@
                     sources.forEach(function(s) {
                         dataUrls.push('./data/' + s + '/' + DATA_TILE_ZOOM + '/' + tx + '/' + ty + '.json');
                     });
+                    dataUrls.push('./data/eunis/' + DATA_TILE_ZOOM + '/' + tx + '/' + ty + '.png');
                 }
             }
 
