@@ -537,7 +537,14 @@
                     return Promise.all(chunk.map(function(u) {
                         return tileCache.match(u).then(function(cached) {
                             if (cached) { loaded++; return; }
-                            return tileCache.add(u).then(function() { loaded++; }).catch(function() { failed++; });
+                            return fetch(u).then(function(r) {
+                                if (r.ok) {
+                                    var clone = r.clone();
+                                    clone.arrayBuffer().then(function(buf) { bytes += buf.byteLength; });
+                                    return tileCache.put(u, r).then(function() { loaded++; });
+                                }
+                                failed++;
+                            }).catch(function() { failed++; });
                         });
                     })).then(function() { updateProgress('Map tiles'); return nextMap(); });
                 }
