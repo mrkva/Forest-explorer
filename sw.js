@@ -68,6 +68,11 @@ self.addEventListener('fetch', function(e) {
                     return fetch(e.request).then(function(response) {
                         if (response.ok) cache.put(e.request, response.clone());
                         return response;
+                    }).catch(function() {
+                        // Offline and not cached — return empty GeoJSON
+                        return new Response('{"type":"FeatureCollection","features":[]}', {
+                            headers: { 'Content-Type': 'application/json' }
+                        });
                     });
                 });
             })
