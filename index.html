@@ -43,12 +43,11 @@
         .opacity-row .pct { width: 30px; text-align: right; font-size: 11px; color: #888; }
 
         .fi { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; font-size: 14px; max-width: 280px; line-height: 1.5; }
-        .fi .section-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin: 0 0 4px; padding: 3px 0; }
-        .fi .section-forest { color: #1a5c1a; border-bottom: 2px solid #1a5c1a; }
-        .fi .section-geology { color: #8b5e3c; border-bottom: 2px solid #8b5e3c; margin-top: 10px; }
+        .fi .section { border-top: 1px solid #e5e7eb; padding-top: 8px; margin-top: 8px; }
+        .fi .section:first-child { border-top: none; padding-top: 0; margin-top: 0; }
+        .fi .section-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px; margin: 0 0 4px; padding: 0; color: #999; }
         .fi .eunis-label { font-size: 17px; font-weight: 700; color: #2563eb; margin-bottom: 2px; }
         .fi .eunis-l1 { font-size: 13px; color: #666; margin-bottom: 6px; }
-        .fi .section-eunis { color: #2563eb; border-bottom: 2px solid #2563eb; }
         .fi .type-name { font-size: 17px; font-weight: 700; color: #1a5c1a; margin-bottom: 4px; }
         .fi .hslt-name { font-size: 14px; color: #555; margin-bottom: 6px; }
         .fi .category-tag {
@@ -117,14 +116,13 @@
 </head>
 <body>
     <div id="map"></div>
-    <div id="hint">Tap the map to identify habitats</div>
+    <div id="hint">Tap anywhere to identify habitat, forest &amp; geology</div>
     <button id="offline-btn">Offline</button>
     <div id="offline-panel">
         <h3>Offline mode</h3>
         <div class="info" id="offline-info">Checking...</div>
         <div class="actions" id="offline-actions">
             <button class="primary" id="save-all-sk">Save all of Slovakia</button>
-            <button class="danger" id="cleanup-cache">Remove stale data</button>
             <button class="danger" id="clear-cache">Clear all saved data</button>
         </div>
         <div id="offline-progress" style="display:none;">
@@ -168,48 +166,27 @@
               layer: wms("https://bio.discomap.eea.europa.eu/arcgis/services/Ecosystem/EcosystemTypeMap_v3_1_Terrestrial/MapServer/WMSServer", eeaAttr, { layers: '0' }), on: false },
             { id: 'jprl', name: 'Forest stands', group: 'forest',
               layer: wms("https://gis.nlcsk.org/arcgis/services/MPRV/JPRL_ZBGIS/MapServer/WMSServer", nlcAttr, { layers: '0', version: '1.1.1' }), on: true },
-            { id: 'drev', name: 'Tree species', group: 'forest',
-              layer: wms("https://gis.nlcsk.org/arcgis/services/Inspire/DrevinoveZlozenie/MapServer/WmsServer", nlcAttr, { layers: '0' }), on: false },
-            { id: 'ltyp', name: 'Forest types', group: 'forest',
-              layer: wms("https://gis.nlcsk.org/arcgis/services/Inspire/LesneTypy/MapServer/WMSServer", nlcAttr, { layers: '0' }), on: false },
             { id: 'geo',  name: 'Geological map 1:50k', group: 'geology',
               layer: wms("https://ags.geology.sk/arcgis/services/WebServices/GM50/MapServer/WMSServer", geoAttr, { layers: '0', version: '1.1.1' }), on: false }
         ];
 
         layers.forEach(function(l) { if (l.on) l.layer.addTo(map); });
 
-        var habitatOverlays = {}, forestOverlays = {}, geoOverlays = {};
-        layers.forEach(function(l) {
-            if (l.group === 'habitat') habitatOverlays[l.name] = l.layer;
-            else if (l.group === 'forest') forestOverlays[l.name] = l.layer;
-            else geoOverlays[l.name] = l.layer;
-        });
+        var overlays = {};
+        layers.forEach(function(l) { overlays[l.name] = l.layer; });
 
         L.control.layers(
             { "OpenStreetMap": osm, "Satellite": satellite },
-            Object.assign({}, habitatOverlays, forestOverlays, geoOverlays),
+            overlays,
             { collapsed: true }
         ).addTo(map);
 
         setTimeout(function() {
             var container = document.querySelector('.leaflet-control-layers-overlays');
             if (!container) return;
-            var labels = container.querySelectorAll('label');
-            var hCount = Object.keys(habitatOverlays).length;
-            var fCount = Object.keys(forestOverlays).length;
-            if (labels.length > 1) {
-                var hh = document.createElement('div');
-                hh.innerHTML = '<strong style="font-size:12px;color:#2563eb;display:block;padding:4px 0 2px;">HABITAT</strong>';
-                container.insertBefore(hh, labels[0]);
-                var fh = document.createElement('div');
-                fh.innerHTML = '<hr style="margin:6px 0;border:none;border-top:2px solid #ccc;">'
-                    + '<strong style="font-size:12px;color:#1a5c1a;display:block;padding:2px 0;">FOREST</strong>';
-                container.insertBefore(fh, labels[hCount]);
-                var gh = document.createElement('div');
-                gh.innerHTML = '<hr style="margin:6px 0;border:none;border-top:2px solid #ccc;">'
-                    + '<strong style="font-size:12px;color:#8b5e3c;display:block;padding:2px 0;">GEOLOGY</strong>';
-                container.insertBefore(gh, labels[hCount + fCount]);
-            }
+            var note = document.createElement('div');
+            note.innerHTML = '<div style="font-size:11px;color:#999;padding:6px 0 0;border-top:1px solid #eee;margin-top:4px;">Tap info is always available</div>';
+            container.appendChild(note);
         }, 100);
 
         var opacityToggle = document.getElementById('opacity-toggle');
@@ -423,7 +400,7 @@
                 var ae = (data.eunis.results && data.eunis.results.length > 0) ? data.eunis.results[0].attributes : {};
                 var label = findField(ae, ['Raster.Label', 'Label']);
                 if (l3 || label) {
-                    html += '<div class="section-label section-eunis">HABITAT</div>';
+                    html += '<div class="section"><div class="section-label">Habitat</div>';
                     if (l3) {
                         html += '<div class="eunis-label">' + l3.code + ' - ' + l3.name + '</div>';
                         if (label) html += '<div class="eunis-l1">' + label + '</div>';
@@ -432,7 +409,8 @@
                         var l1 = findField(ae, ['Raster.EUNIS_L1', 'EUNIS_L1']);
                         if (l1) html += '<div class="eunis-l1">' + l1 + '</div>';
                     }
-                    html += '<div class="source">Source: <a href="https://www.eea.europa.eu" target="_blank">EEA EUNIS Habitat Map</a></div>';
+                    html += '<div class="source">Source: <a href="https://www.eea.europa.eu" target="_blank">EEA</a></div>';
+                    html += '</div>';
                     hasEunis = true;
                 }
             }
@@ -456,8 +434,9 @@
                 if (area) forestHtml += '<div class="area">' + (parseFloat(area) / 10000).toFixed(2) + ' ha</div>';
             }
             if (hasForest) {
-                html += '<div class="section-label section-forest">FOREST</div>' + forestHtml;
-                html += '<div class="source">Source: <a href="https://web.nlcsk.org" target="_blank">N\u00e1rodn\u00e9 lesn\u00edcke centrum</a></div>';
+                html += '<div class="section"><div class="section-label">Forest</div>' + forestHtml;
+                html += '<div class="source">Source: <a href="https://web.nlcsk.org" target="_blank">NLC SR</a></div>';
+                html += '</div>';
             }
 
             if (data.geo && data.geo.results && data.geo.results.length > 0) {
@@ -481,13 +460,14 @@
                     hasGeo = true;
                 });
                 if (hasGeo) {
-                    html += '<div class="section-label section-geology">GEOLOGY</div>' + geoHtml;
+                    html += '<div class="section"><div class="section-label">Geology</div>' + geoHtml;
                     html += '<div class="source">Source: <a href="https://www.geology.sk" target="_blank">SG\u00daD\u0160</a></div>';
+                    html += '</div>';
                 }
             }
 
             if (!hasEunis && !hasForest && !hasGeo) {
-                html += '<p class="error">No data here.<br>Zoom in and tap a colored area.</p>';
+                html += '<p class="error">No data at this location.</p>';
             }
             html += '</div>';
             return html;
@@ -736,18 +716,6 @@
                     return nextData();
                 });
             }
-        });
-
-        document.getElementById('cleanup-cache').addEventListener('click', function() {
-            var btn = this;
-            btn.textContent = 'Cleaning up...';
-            btn.disabled = true;
-            cleanupCache().then(function(removed) {
-                btn.textContent = removed > 0 ? 'Removed ' + removed + ' items' : 'Nothing to clean';
-                btn.disabled = false;
-                updateOfflineInfo();
-                setTimeout(function() { btn.textContent = 'Remove stale data'; }, 3000);
-            });
         });
 
         document.getElementById('clear-cache').addEventListener('click', function() {
