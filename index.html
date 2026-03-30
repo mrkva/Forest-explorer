@@ -124,7 +124,8 @@
         <div class="info" id="offline-info">Checking...</div>
         <div class="actions" id="offline-actions">
             <button class="primary" id="save-all-sk">Save all of Slovakia</button>
-            <button class="danger" id="clear-cache">Clear saved data</button>
+            <button class="danger" id="cleanup-cache">Remove stale data</button>
+            <button class="danger" id="clear-cache">Clear all saved data</button>
         </div>
         <div id="offline-progress" style="display:none;">
             <div class="bar-bg"><div class="bar-fill" id="offline-bar"></div></div>
@@ -592,15 +593,7 @@
                 .then(function() { return removed; });
         }
 
-        // Show initial state, then run cleanup in background
         updateOfflineInfo();
-        offlineBtn.style.opacity = '0.6';
-        offlineBtn.textContent = 'Offline...';
-        cleanupCache().then(function(removed) {
-            offlineBtn.style.opacity = '1';
-            if (removed > 0) console.log('Cache cleanup: removed ' + removed + ' stale entries');
-            updateOfflineInfo();
-        });
 
         offlineBtn.addEventListener('click', function() {
             panelOpen = !panelOpen;
@@ -743,6 +736,18 @@
                     return nextData();
                 });
             }
+        });
+
+        document.getElementById('cleanup-cache').addEventListener('click', function() {
+            var btn = this;
+            btn.textContent = 'Cleaning up...';
+            btn.disabled = true;
+            cleanupCache().then(function(removed) {
+                btn.textContent = removed > 0 ? 'Removed ' + removed + ' items' : 'Nothing to clean';
+                btn.disabled = false;
+                updateOfflineInfo();
+                setTimeout(function() { btn.textContent = 'Remove stale data'; }, 3000);
+            });
         });
 
         document.getElementById('clear-cache').addEventListener('click', function() {
