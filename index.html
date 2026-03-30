@@ -602,15 +602,21 @@
                         return cache.match(u).then(function(cached) {
                             if (cached) { loaded++; return; }
                             return fetch(u).then(function(r) {
-                                if (r.ok) { cache.put(u, r); loaded++; }
-                                else failed++;
+                                if (r.ok) {
+                                    cache.put(u, r); loaded++;
+                                } else {
+                                    // Cache empty GeoJSON for 404s (tile has no data in this area)
+                                    cache.put(u, new Response('{"type":"FeatureCollection","features":[]}',
+                                        { headers: { 'Content-Type': 'application/json' } }));
+                                    loaded++;
+                                }
                             }).catch(function() { failed++; });
                         });
                     })).then(function() {
                         var done = loaded + failed;
                         var pct = Math.round(done / total * 100);
                         bar.style.width = pct + '%';
-                        status.textContent = done + ' / ' + total + ' (' + Math.round(loaded / 1024 * 100) / 100 + ' k cached)';
+                        status.textContent = done + ' / ' + total;
                         return next();
                     });
                 }
