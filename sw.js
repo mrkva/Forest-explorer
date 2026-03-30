@@ -1,4 +1,4 @@
-var CACHE_SHELL = 'habitat-shell-v2';
+var CACHE_SHELL = 'habitat-shell-v3';
 var CACHE_TILES = 'habitat-tiles-v2';
 var CACHE_DATA = 'habitat-data-v2';
 
