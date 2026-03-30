@@ -466,7 +466,52 @@
                 info.textContent = '';
             }
         }
-        updateOfflineInfo();
+
+        // Build sets of valid URLs for cache cleanup
+        var validUrls = (function() {
+            var urls = getAllUrls();
+            var origin = location.origin + location.pathname.replace(/\/[^/]*$/, '/');
+            var set = {};
+            // Normalize data tile URLs to full absolute URLs (as stored in cache)
+            urls.data.forEach(function(u) {
+                var full = u.indexOf('./') === 0 ? origin + u.substring(2) : u;
+                set[full] = true;
+            });
+            urls.map.forEach(function(u) { set[u] = true; });
+            return set;
+        })();
+
+        function cleanupCache() {
+            var removed = 0;
+            return Promise.all([
+                caches.open('habitat-tiles-v2').then(function(cache) {
+                    return cache.keys().then(function(keys) {
+                        return Promise.all(keys.map(function(req) {
+                            if (!validUrls[req.url]) {
+                                removed++;
+                                return cache.delete(req);
+                            }
+                        }));
+                    });
+                }),
+                caches.open('habitat-data-v2').then(function(cache) {
+                    return cache.keys().then(function(keys) {
+                        return Promise.all(keys.map(function(req) {
+                            if (!validUrls[req.url]) {
+                                removed++;
+                                return cache.delete(req);
+                            }
+                        }));
+                    });
+                })
+            ]).then(function() { return removed; });
+        }
+
+        // Run cleanup once on load, then update info
+        cleanupCache().then(function(removed) {
+            if (removed > 0) console.log('Cache cleanup: removed ' + removed + ' stale entries');
+            updateOfflineInfo();
+        });
 
         offlineBtn.addEventListener('click', function() {
             panelOpen = !panelOpen;
