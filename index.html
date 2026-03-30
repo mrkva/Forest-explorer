@@ -533,7 +533,48 @@
             navigator.storage.persist();
         }
 
-        document.getElementById('download-all').addEventListener('click', function() {
+        // Check if data tiles are already cached
+        var downloadBtn = document.getElementById('download-all');
+        var allDataTileUrls = (function() {
+            var SK = { south: 47.73, north: 49.61, west: 16.83, east: 22.57 };
+            var sw = L.latLng(SK.south, SK.west);
+            var ne = L.latLng(SK.north, SK.east);
+            var tMin = latLngToTile(sw, DATA_TILE_ZOOM);
+            var tMax = latLngToTile(ne, DATA_TILE_ZOOM);
+            var sources = ['jprl', 'lestypy', 'geo'];
+            var urls = [];
+            for (var tx = tMin.x; tx <= tMax.x; tx++) {
+                for (var ty = tMax.y; ty <= tMin.y; ty++) {
+                    sources.forEach(function(s) {
+                        urls.push('./data/' + s + '/' + DATA_TILE_ZOOM + '/' + tx + '/' + ty + '.json');
+                    });
+                }
+            }
+            return urls;
+        })();
+
+        function checkDataCache() {
+            caches.open('habitat-data-v2').then(function(cache) {
+                // Sample ~100 tiles spread across the full set
+                var step = Math.max(1, Math.floor(allDataTileUrls.length / 100));
+                var sample = [];
+                for (var i = 0; i < allDataTileUrls.length; i += step) {
+                    sample.push(allDataTileUrls[i]);
+                }
+                return Promise.all(sample.map(function(u) {
+                    return cache.match(u).then(function(r) { return r ? 1 : 0; });
+                })).then(function(results) {
+                    var cached = results.reduce(function(a, b) { return a + b; }, 0);
+                    if (cached > sample.length * 0.8) {
+                        downloadBtn.textContent = 'Data ready \u2713';
+                        downloadBtn.style.background = '#555';
+                    }
+                });
+            });
+        }
+        checkDataCache();
+
+        downloadBtn.addEventListener('click', function() {
             var panel = document.getElementById('download-panel');
             var status = document.getElementById('download-status');
             var bar = document.getElementById('download-bar');
@@ -570,6 +611,8 @@
                         if (failed > 0) msg += ' (' + failed + ' not yet available)';
                         status.textContent = msg;
                         bar.style.width = '100%';
+                        downloadBtn.textContent = 'Data ready \u2713';
+                        downloadBtn.style.background = '#555';
                         setTimeout(function() { panel.style.display = 'none'; }, 4000);
                         return;
                     }
