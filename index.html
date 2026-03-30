@@ -248,10 +248,6 @@
             'U': { text: 'Special purpose', cls: 'cat-U' }
         };
 
-        function isGroupActive(group) {
-            return layers.some(function(l) { return l.group === group && map.hasLayer(l.layer); });
-        }
-
         function identifyUrl(source, latlng) {
             var b = map.getBounds(), s = map.getSize();
             return source.url + '?' + [
@@ -402,24 +398,14 @@
         }
 
         map.on('click', function(e) {
-            var forestActive = isGroupActive('forest');
-            var geoActive = isGroupActive('geology');
-            if (!forestActive && !geoActive) return;
-
             var popup = L.popup({ maxWidth: 300, maxHeight: 400 })
                 .setLatLng(e.latlng)
                 .setContent('<div class="fi"><p class="loading">Loading...</p></div>')
                 .openOn(map);
 
-            var activeSources = identifySources.filter(function(src) {
-                if (src.group === 'forest') return forestActive;
-                if (src.group === 'geology') return geoActive;
-                return true;
-            });
+            var data = {}, done = 0, total = identifySources.length;
 
-            var data = {}, done = 0, total = activeSources.length;
-
-            activeSources.forEach(function(src) {
+            identifySources.forEach(function(src) {
                 var ck = cacheKey(src.key, e.latlng);
                 if (identifyCache[ck]) {
                     data[src.key] = identifyCache[ck];
@@ -466,17 +452,12 @@
             }
 
             // Collect data tile URLs for visible area
-            var forestActive = isGroupActive('forest');
-            var geoActive = isGroupActive('geology');
             var dataTileUrls = [];
-            // Find all z12 data tiles that cover the visible area
             var tMin = latLngToTile(b.getSouthWest(), DATA_TILE_ZOOM);
             var tMax = latLngToTile(b.getNorthEast(), DATA_TILE_ZOOM);
             for (var tx = tMin.x; tx <= tMax.x; tx++) {
                 for (var ty = tMax.y; ty <= tMin.y; ty++) {
                     identifySources.forEach(function(src) {
-                        if (src.group === 'forest' && !forestActive) return;
-                        if (src.group === 'geology' && !geoActive) return;
                         dataTileUrls.push('./data/' + src.key + '/' + DATA_TILE_ZOOM + '/' + tx + '/' + ty + '.json');
                     });
                 }
