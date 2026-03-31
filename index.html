@@ -505,7 +505,7 @@
             return srcKey + ':' + (Math.round(latlng.lat * 1000) / 1000) + ',' + (Math.round(latlng.lng * 1000) / 1000);
         }
 
-        function buildPopup(data) {
+        function buildPopup(data, latlng) {
             var html = '<div class="fi">';
             var hasEunis = false, hasForest = false, hasGeo = false;
 
@@ -601,6 +601,8 @@
             if (!hasEunis && !hasForest && !hasGeo && !forestErr) {
                 html += '<p class="error">No data at this location.</p>';
             }
+            html += '<div class="source" style="margin-top:8px;border-top:1px solid #eee;padding-top:6px;">'
+                + latlng.lat.toFixed(7) + 'N, ' + latlng.lng.toFixed(7) + 'E</div>';
             html += '</div>';
             return html;
         }
@@ -617,7 +619,7 @@
                 var ck = cacheKey(src.key, e.latlng);
                 if (identifyCache[ck]) {
                     data[src.key] = identifyCache[ck];
-                    if (++done === total) popup.setContent(buildPopup(data));
+                    if (++done === total) popup.setContent(buildPopup(data, e.latlng));
                     return;
                 }
                 querySource(src, e.latlng)
@@ -627,7 +629,7 @@
                     })
                     .catch(function() { data[src.key] = { _error: true }; })
                     .finally(function() {
-                        if (++done === total) popup.setContent(buildPopup(data));
+                        if (++done === total) popup.setContent(buildPopup(data, e.latlng));
                     });
             });
         });
